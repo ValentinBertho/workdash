@@ -2,27 +2,67 @@
 import { useEffect, useState, useCallback } from 'react';
 import { DashboardData, Comment, Project, Status } from '@/types';
 
-/* ─── Status config ─────────────────────────────────────────── */
-const STATUS: Record<Status, { label: string; color: string; bg: string }> = {
-  'en-cours':   { label: 'En cours',   color: '#1A5CFF', bg: '#EEF2FF' },
-  'a-deployer': { label: 'À déployer', color: '#B07D10', bg: '#FEF8E7' },
-  'ok':         { label: 'OK ✓',       color: '#0F8B5A', bg: '#E8F5EF' },
-  'bloque':     { label: 'Bloqué',     color: '#C0392B', bg: '#FDECEA' },
-  'a-cadrer':   { label: 'À cadrer',   color: '#8A8178', bg: '#F2EFE9' },
+/* ─── Status config ──────────────────────────────────────────── */
+const STATUS: Record<Status, { label: string; icon: string; color: string; bg: string }> = {
+  'en-cours':   { label: 'En cours',   icon: '⚡', color: '#7C3AED', bg: '#EDE9FE' },
+  'a-deployer': { label: 'À déployer', icon: '🚀', color: '#EA580C', bg: '#FFEDD5' },
+  'ok':         { label: 'Terminé',    icon: '✅', color: '#059669', bg: '#D1FAE5' },
+  'bloque':     { label: 'Bloqué',     icon: '🔴', color: '#DC2626', bg: '#FEE2E2' },
+  'a-cadrer':   { label: 'À cadrer',   icon: '📋', color: '#64748B', bg: '#F1F5F9' },
 };
 
+/* ─── Gamification helpers ───────────────────────────────────── */
 function getWeek(d: Date) {
   const s = new Date(d.getFullYear(), 0, 1);
   return Math.ceil(((d.getTime() - s.getTime()) / 86400000 + s.getDay() + 1) / 7);
 }
 
+function calcXP(data: DashboardData, comments: Comment[]) {
+  const tasks = data.projects.flatMap(p => p.tasks);
+  return (
+    tasks.filter(t => t.done).length * 10 +
+    data.weeklyTodos.filter(t => t.done).length * 15 +
+    data.projects.filter(p => p.progress >= 70).length * 25 +
+    comments.length * 5
+  );
+}
+
+function getLevel(xp: number) { return Math.floor(xp / 150) + 1; }
+function getXPProgress(xp: number) { return ((xp % 150) / 150) * 100; }
+
+function getAchievements(data: DashboardData, comments: Comment[]) {
+  const results: { icon: string; label: string; desc: string }[] = [];
+  const tasks = data.projects.flatMap(p => p.tasks);
+  const completedTasks = tasks.filter(t => t.done).length;
+  const totalTasks = tasks.length;
+  const completedTodos = data.weeklyTodos.filter(t => t.done).length;
+
+  if (data.projects.length >= 5)
+    results.push({ icon: '🚀', label: 'Multi-tasker', desc: '5+ projets actifs' });
+  if (data.projects.filter(p => p.progress >= 70).length >= 3)
+    results.push({ icon: '🔥', label: 'En Feu !', desc: '3 projets à +70%' });
+  if (completedTodos > 0 && completedTodos === data.weeklyTodos.length)
+    results.push({ icon: '⚡', label: 'Sprint Master', desc: 'Toutes les quêtes OK !' });
+  if (comments.length >= 5)
+    results.push({ icon: '💬', label: 'Communicant', desc: '5+ échanges' });
+  if (totalTasks > 0 && completedTasks / totalTasks >= 0.5)
+    results.push({ icon: '🎯', label: 'Sharp Shooter', desc: '+50% tâches complétées' });
+  if (data.projects.some(p => p.status === 'a-deployer'))
+    results.push({ icon: '🛸', label: 'Go Live !', desc: 'Un projet prêt à déployer' });
+  if (data.projects.some(p => p.status === 'ok'))
+    results.push({ icon: '🏅', label: 'Livreur', desc: 'Projet livré avec succès' });
+
+  return results;
+}
+
+/* ─── Main page ──────────────────────────────────────────────── */
 export default function Page() {
-  const [data, setData]       = useState<DashboardData | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
-  const [openId, setOpenId]   = useState<string | null>(null);
+  const [data, setData]             = useState<DashboardData | null>(null);
+  const [comments, setComments]     = useState<Comment[]>([]);
+  const [openId, setOpenId]         = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [author, setAuthor]   = useState<'manager' | 'valentin'>('manager');
-  const [sending, setSending] = useState(false);
+  const [author, setAuthor]         = useState<'manager' | 'valentin'>('manager');
+  const [sending, setSending]       = useState(false);
 
   const load = useCallback(async () => {
     const [d, c] = await Promise.all([
@@ -47,150 +87,301 @@ export default function Page() {
 
   if (!data) return (
     <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>Chargement…</span>
+      <div style={{ textAlign: 'center' }}>
+        <div className="float" style={{ fontSize: '3.5rem', marginBottom: 16 }}>⚡</div>
+        <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.1rem', fontWeight: 900, color: 'var(--purple)' }}>
+          Chargement de WorkDash…
+        </div>
+      </div>
     </div>
   );
 
-  const now    = new Date();
-  const doneTodos = data.weeklyTodos.filter(t => t.done).length;
-  const sorted = [...data.projects].sort((a, b) => a.priority - b.priority);
-  const inProgress  = sorted.filter(p => p.status === 'en-cours');
-  const readyDeploy = sorted.filter(p => p.status === 'a-deployer');
-  const done_ok     = sorted.filter(p => p.status === 'ok');
-  const blocked     = sorted.filter(p => p.status === 'bloque' || p.status === 'a-cadrer');
+  const now          = new Date();
+  const xp           = calcXP(data, comments);
+  const level        = getLevel(xp);
+  const xpPct        = getXPProgress(xp);
+  const achievements = getAchievements(data, comments);
+  const doneTodos    = data.weeklyTodos.filter(t => t.done).length;
+  const sorted       = [...data.projects].sort((a, b) => a.priority - b.priority);
+  const avgProgress  = Math.round(data.projects.reduce((s, p) => s + p.progress, 0) / Math.max(data.projects.length, 1));
+
+  const sections = [
+    { title: 'En cours',        icon: '⚡', accent: '#7C3AED', bg: '#EDE9FE', items: sorted.filter(p => p.status === 'en-cours') },
+    { title: 'Prêt à déployer', icon: '🚀', accent: '#EA580C', bg: '#FFEDD5', items: sorted.filter(p => p.status === 'a-deployer') },
+    { title: 'Terminé / OK',    icon: '✅', accent: '#059669', bg: '#D1FAE5', items: sorted.filter(p => p.status === 'ok') },
+    { title: 'À arbitrer',      icon: '🔴', accent: '#DC2626', bg: '#FEE2E2', items: sorted.filter(p => p.status === 'bloque' || p.status === 'a-cadrer') },
+  ].filter(s => s.items.length > 0);
 
   const commentProps = { commentText, setCommentText, author, setAuthor, onSend: sendComment, sending };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
 
-      {/* Top bar */}
-      <header style={{ background: 'var(--white)', borderBottom: '1px solid var(--border)' }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60 }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '-0.02em' }}>
-              Charge de travail
-            </span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)' }}>Valentin · MISMO</span>
+      {/* ── HEADER ─────────────────────────────────────────── */}
+      <header style={{
+        background: 'linear-gradient(135deg, #5B21B6 0%, #7C3AED 60%, #6D28D9 100%)',
+        borderBottom: '3px solid #1E1B4B',
+        boxShadow: '0 4px 0 #1E1B4B',
+      }}>
+        <div style={{ maxWidth: 1280, margin: '0 auto', padding: '0 32px',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 76 }}>
+
+          {/* Logo */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ width: 44, height: 44, background: 'white', borderRadius: 14, border: '2.5px solid #1E1B4B',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem',
+              boxShadow: '3px 3px 0 #1E1B4B' }}>
+              ⚡
+            </div>
+            <div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', fontWeight: 900, color: 'white', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+                WorkDash
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)' }}>
+                Valentin · MISMO
+              </div>
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)' }}>
-              Semaine {getWeek(now)} · {now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-            </span>
-            <a href="/admin" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', fontWeight: 500,
-              color: 'var(--accent)', textDecoration: 'none', padding: '5px 12px', borderRadius: 6,
-              background: 'var(--accent-light)', border: '1px solid #C7D7FF' }}>Admin →</a>
+
+          {/* Player Card */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14,
+            background: 'rgba(255,255,255,0.12)', borderRadius: 14, padding: '10px 18px',
+            border: '2px solid rgba(255,255,255,0.25)' }}>
+            <div style={{ width: 40, height: 40, background: '#F59E0B', borderRadius: 12,
+              border: '2.5px solid rgba(255,255,255,0.8)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem',
+              boxShadow: '2px 2px 0 #92400E' }}>
+              💻
+            </div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'white', fontSize: '0.95rem' }}>
+                  Valentin
+                </span>
+                <span style={{ background: '#F59E0B', color: '#78350F', fontSize: '0.65rem', fontWeight: 900,
+                  padding: '2px 9px', borderRadius: 99, border: '2px solid #92400E',
+                  fontFamily: 'var(--font-display)' }}>
+                  Lv.{level}
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ width: 130, height: 7, background: 'rgba(255,255,255,0.2)', borderRadius: 99,
+                  overflow: 'hidden', border: '1.5px solid rgba(255,255,255,0.3)' }}>
+                  <div className="xp-bar" style={{ height: '100%', width: `${xpPct}%`, borderRadius: 99 }} />
+                </div>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'rgba(255,255,255,0.75)' }}>
+                  {xp} XP
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Right controls */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'white', fontSize: '0.9rem' }}>
+                Semaine {getWeek(now)}
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'rgba(255,255,255,0.65)' }}>
+                {now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+              </div>
+            </div>
+            <a href="/admin" style={{ fontFamily: 'var(--font-display)', fontSize: '0.8rem', fontWeight: 900,
+              color: '#7C3AED', textDecoration: 'none', padding: '8px 16px', borderRadius: 10,
+              background: 'white', border: '2.5px solid #1E1B4B', boxShadow: '3px 3px 0 #1E1B4B' }}>
+              Admin →
+            </a>
           </div>
         </div>
       </header>
 
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 40px' }}>
+      <main style={{ maxWidth: 1280, margin: '0 auto', padding: '28px 32px' }}>
 
-        {/* KPI strip */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 36 }}>
-          {[
-            { label: 'Projets actifs',      val: data.projects.length, color: 'var(--text)' },
-            { label: 'En cours',             val: inProgress.length,    color: '#1A5CFF' },
-            { label: 'Prêts à déployer',     val: readyDeploy.length,   color: '#B07D10' },
-            { label: 'Tâches semaine',        val: `${doneTodos}/${data.weeklyTodos.length}`, color: '#0F8B5A' },
-            { label: 'Échanges',             val: comments.length,      color: 'var(--muted)' },
-          ].map(k => (
-            <div key={k.label} style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.9rem', fontWeight: 300, color: k.color, lineHeight: 1 }}>{k.val}</div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 5 }}>{k.label}</div>
+        {/* ── KPI STRIP ───────────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 32 }}>
+          {([
+            { label: 'Projets actifs',  val: data.projects.length,                                           icon: '📁', color: '#7C3AED', bg: '#EDE9FE', border: '#7C3AED' },
+            { label: 'En cours',        val: sorted.filter(p => p.status === 'en-cours').length,             icon: '⚡', color: '#5B21B6', bg: '#DDD6FE', border: '#5B21B6' },
+            { label: 'À déployer',      val: sorted.filter(p => p.status === 'a-deployer').length,           icon: '🚀', color: '#EA580C', bg: '#FFEDD5', border: '#EA580C' },
+            { label: 'Avancement moy.', val: `${avgProgress}%`,                                              icon: '📊', color: '#2563EB', bg: '#DBEAFE', border: '#2563EB' },
+            { label: 'Quêtes semaine',  val: `${doneTodos}/${data.weeklyTodos.length}`,                      icon: '🎯', color: '#DB2777', bg: '#FCE7F3', border: '#DB2777' },
+          ] as const).map((k, i) => (
+            <div key={k.label} className="slide-up" style={{
+              animationDelay: `${i * 0.06}s`,
+              background: k.bg,
+              border: `2.5px solid ${k.border}`,
+              borderRadius: 16,
+              padding: '18px 20px',
+              boxShadow: `4px 4px 0 ${k.border}`,
+            }}>
+              <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>{k.icon}</div>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '2.2rem', fontWeight: 900, color: k.color, lineHeight: 1 }}>
+                {k.val}
+              </div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: k.color, opacity: 0.75,
+                textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 5 }}>
+                {k.label}
+              </div>
             </div>
           ))}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 272px', gap: 24, alignItems: 'start' }}>
+        {/* ── MAIN GRID ───────────────────────────────────────── */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 292px', gap: 24, alignItems: 'start' }}>
 
-          {/* Projects */}
+          {/* PROJECTS */}
           <div>
-            {[
-              { title: 'En cours',            accent: '#1A5CFF', items: inProgress },
-              { title: 'Prêt à déployer',     accent: '#F59E0B', items: readyDeploy },
-              { title: 'Terminé / OK',         accent: '#0F8B5A', items: done_ok },
-              { title: 'À arbitrer / cadrer',  accent: '#C0392B', items: blocked },
-            ].filter(s => s.items.length > 0).map(section => (
-              <div key={section.title} style={{ marginBottom: 30 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <div style={{ width: 3, height: 16, background: section.accent, borderRadius: 2 }} />
-                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 600, letterSpacing: '-0.01em' }}>
-                    {section.title}
-                  </span>
-                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)' }}>
-                    {section.items.length} projet{section.items.length > 1 ? 's' : ''}
-                  </span>
+            {sections.map((section, si) => (
+              <div key={section.title} className="slide-up" style={{ marginBottom: 28, animationDelay: `${si * 0.08}s` }}>
+
+                {/* Section header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8,
+                    background: section.bg, border: `2.5px solid ${section.accent}`,
+                    borderRadius: 12, padding: '5px 14px',
+                    boxShadow: `3px 3px 0 ${section.accent}` }}>
+                    <span style={{ fontSize: '1rem' }}>{section.icon}</span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.88rem', fontWeight: 900, color: section.accent }}>
+                      {section.title}
+                    </span>
+                    <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.65rem', fontWeight: 900,
+                      background: section.accent, color: 'white', borderRadius: 99, padding: '2px 8px' }}>
+                      {section.items.length}
+                    </span>
+                  </div>
+                  <div style={{ flex: 1, height: 2, background: section.bg, borderRadius: 99, border: `1px solid ${section.accent}33` }} />
                 </div>
-                {section.items.map((p, i) => (
-                  <ProjectRow key={p.id} project={p} animDelay={i * 0.04}
-                    comments={comments.filter(c => c.projectId === p.id)}
-                    isOpen={openId === p.id}
-                    onToggle={() => setOpenId(o => o === p.id ? null : p.id)}
-                    {...commentProps} />
-                ))}
+
+                {/* Cards */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {section.items.map((p, i) => (
+                    <ProjectCard
+                      key={p.id}
+                      project={p}
+                      animDelay={i * 0.05}
+                      comments={comments.filter(c => c.projectId === p.id)}
+                      isOpen={openId === p.id}
+                      onToggle={() => setOpenId(o => o === p.id ? null : p.id)}
+                      {...commentProps}
+                    />
+                  ))}
+                </div>
               </div>
             ))}
           </div>
 
-          {/* Sidebar */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* ── SIDEBAR ─────────────────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-            {/* Weekly todos */}
-            <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 600, marginBottom: 12, letterSpacing: '-0.01em' }}>
-                Semaine en cours
+            {/* Weekly quests */}
+            <div style={{ background: 'white', border: '2.5px solid #1E1B4B', borderRadius: 18, padding: '20px', boxShadow: '4px 4px 0 #1E1B4B' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                <span style={{ fontSize: '1.2rem' }}>🗓</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 900 }}>
+                  Quêtes de la semaine
+                </span>
               </div>
-              {/* Progress bar */}
+
+              {/* Quest progress bar */}
               <div style={{ marginBottom: 14 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{doneTodos} sur {data.weeklyTodos.length}</span>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#0F8B5A', fontWeight: 500 }}>
-                    {Math.round(doneTodos / data.weeklyTodos.length * 100)}%
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.64rem', color: 'var(--muted)' }}>
+                    {doneTodos} / {data.weeklyTodos.length}
+                  </span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.78rem', fontWeight: 900,
+                    color: doneTodos === data.weeklyTodos.length ? '#059669' : '#7C3AED' }}>
+                    {Math.round(doneTodos / Math.max(data.weeklyTodos.length, 1) * 100)}%
                   </span>
                 </div>
-                <div style={{ height: 4, background: 'var(--bg2)', borderRadius: 99, overflow: 'hidden' }}>
-                  <div style={{ height: '100%', width: `${doneTodos / data.weeklyTodos.length * 100}%`,
-                    background: 'linear-gradient(90deg,#0F8B5A,#34D399)', borderRadius: 99 }} />
+                <div style={{ height: 12, background: '#F3F4F6', borderRadius: 99, overflow: 'hidden', border: '2px solid #1E1B4B' }}>
+                  <div style={{ height: '100%', borderRadius: 99, transition: 'width 0.6s ease',
+                    width: `${doneTodos / Math.max(data.weeklyTodos.length, 1) * 100}%`,
+                    background: doneTodos === data.weeklyTodos.length
+                      ? 'linear-gradient(90deg, #059669, #34D399)'
+                      : 'linear-gradient(90deg, #7C3AED, #A78BFA)' }} />
                 </div>
               </div>
-              {data.weeklyTodos.map(t => (
-                <div key={t.id} style={{ display: 'flex', gap: 9, padding: '5px 0', borderBottom: '1px solid var(--border)', alignItems: 'flex-start' }}>
-                  <div style={{ width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 2,
-                    background: t.done ? '#0F8B5A' : 'transparent',
-                    border: t.done ? 'none' : '1.5px solid var(--border2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '0.55rem', color: '#fff', fontWeight: 700 }}>
-                    {t.done ? '✓' : ''}
+
+              {/* Todo list */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                {data.weeklyTodos.map(t => (
+                  <div key={t.id} style={{ display: 'flex', gap: 9, padding: '5px 0',
+                    borderBottom: '1px dashed #E9D5FF', alignItems: 'flex-start' }}>
+                    <div style={{ width: 18, height: 18, borderRadius: 5, flexShrink: 0, marginTop: 1,
+                      background: t.done ? '#059669' : 'white',
+                      border: `2px solid ${t.done ? '#059669' : '#D1D5DB'}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '0.6rem', color: 'white', fontWeight: 900 }}>
+                      {t.done ? '✓' : ''}
+                    </div>
+                    <span style={{ fontSize: '0.76rem', lineHeight: 1.45,
+                      color: t.done ? '#9CA3AF' : 'var(--text)',
+                      textDecoration: t.done ? 'line-through' : 'none',
+                      fontWeight: t.done ? 400 : 500 }}>
+                      {t.label}
+                    </span>
                   </div>
-                  <span style={{ fontSize: '0.76rem', lineHeight: 1.4,
-                    color: t.done ? 'var(--muted)' : 'var(--text)',
-                    textDecoration: t.done ? 'line-through' : 'none' }}>{t.label}</span>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
 
+            {/* Achievements */}
+            {achievements.length > 0 && (
+              <div style={{ background: 'linear-gradient(135deg, #FEF3C7, #FFFBEB)',
+                border: '2.5px solid #D97706', borderRadius: 18, padding: '20px',
+                boxShadow: '4px 4px 0 #D97706' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: '1.2rem' }}>🏆</span>
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 900, color: '#92400E' }}>
+                    Achievements
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                  {achievements.map((a, i) => (
+                    <div key={i} title={a.desc} style={{
+                      display: 'flex', alignItems: 'center', gap: 5,
+                      background: 'white', border: '2px solid #D97706',
+                      borderRadius: 10, padding: '5px 10px',
+                      boxShadow: '2px 2px 0 #D97706', cursor: 'default' }}>
+                      <span style={{ fontSize: '0.9rem' }}>{a.icon}</span>
+                      <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.68rem', fontWeight: 900, color: '#92400E' }}>
+                        {a.label}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Decision points */}
-            <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px' }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 600, marginBottom: 12, letterSpacing: '-0.01em' }}>
-                Points à décider
+            <div style={{ background: 'white', border: '2.5px solid #DC2626', borderRadius: 18, padding: '20px', boxShadow: '4px 4px 0 #DC2626' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                <span style={{ fontSize: '1.2rem' }}>❓</span>
+                <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 900, color: '#DC2626' }}>
+                  Points à décider
+                </span>
               </div>
               {[
                 'Créer brouillon mail depuis API GRAPH → Todo YN',
                 "NDF : Ajout analytique + suppression d'un frais",
                 "Outil d'Audit : CRON, réconciliation auto, paramétrage dynamique",
               ].map((q, i) => (
-                <div key={i} style={{ display: 'flex', gap: 8, padding: '7px 0', borderBottom: i < 2 ? '1px solid var(--border)' : 'none', alignItems: 'flex-start' }}>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: '#D4520A',
-                    background: '#FEF0E7', borderRadius: 3, padding: '1px 5px', flexShrink: 0, marginTop: 2 }}>?</span>
-                  <span style={{ fontSize: '0.76rem', lineHeight: 1.4 }}>{q}</span>
+                <div key={i} style={{ display: 'flex', gap: 8, padding: '7px 0',
+                  borderBottom: i < 2 ? '1px dashed #FECACA' : 'none', alignItems: 'flex-start' }}>
+                  <div style={{ width: 18, height: 18, background: '#FEE2E2', border: '2px solid #DC2626',
+                    borderRadius: 5, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.65rem', fontWeight: 900, color: '#DC2626', flexShrink: 0, marginTop: 1 }}>
+                    !
+                  </div>
+                  <span style={{ fontSize: '0.76rem', lineHeight: 1.4, color: '#7F1D1D', fontWeight: 500 }}>
+                    {q}
+                  </span>
                 </div>
               ))}
             </div>
 
             {/* Last updated */}
-            <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--muted)' }}>
+            <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--muted)', padding: '4px 0' }}>
               Mis à jour · {new Date(data.updatedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
@@ -200,129 +391,227 @@ export default function Page() {
   );
 }
 
-/* ─── Project row ───────────────────────────────────────────── */
-function ProjectRow({ project, animDelay, comments, isOpen, onToggle, commentText, setCommentText, author, setAuthor, onSend, sending }:
-  { project: Project; animDelay: number; comments: Comment[]; isOpen: boolean; onToggle: () => void;
-    commentText: string; setCommentText: (v: string) => void; author: 'manager' | 'valentin';
-    setAuthor: (v: 'manager' | 'valentin') => void; onSend: () => void; sending: boolean }) {
-
+/* ─── Project Card ───────────────────────────────────────────── */
+function ProjectCard({
+  project, animDelay, comments, isOpen, onToggle,
+  commentText, setCommentText, author, setAuthor, onSend, sending,
+}: {
+  project: Project; animDelay: number; comments: Comment[]; isOpen: boolean; onToggle: () => void;
+  commentText: string; setCommentText: (v: string) => void;
+  author: 'manager' | 'valentin'; setAuthor: (v: 'manager' | 'valentin') => void;
+  onSend: () => void; sending: boolean;
+}) {
   const st = STATUS[project.status];
   const doneTasks = project.tasks.filter(t => t.done).length;
+  const progressColor = project.progress >= 70 ? '#059669' : project.progress >= 40 ? '#D97706' : '#DC2626';
+  const progressGradient = project.progress >= 70
+    ? 'linear-gradient(90deg, #059669, #34D399)'
+    : project.progress >= 40
+      ? 'linear-gradient(90deg, #D97706, #FBBF24)'
+      : 'linear-gradient(90deg, #DC2626, #F87171)';
 
   return (
-    <div style={{ animationDelay: `${animDelay}s`,
-      background: 'var(--white)', border: `1px solid ${isOpen ? '#A0B8FF' : 'var(--border)'}`,
-      borderRadius: 10, marginBottom: 8, overflow: 'hidden',
-      boxShadow: isOpen ? '0 0 0 3px #EEF2FF' : '0 1px 2px rgba(0,0,0,0.03)',
-      transition: 'border-color 0.15s, box-shadow 0.15s' }}>
+    <div className="slide-up" style={{
+      animationDelay: `${animDelay}s`,
+      background: 'white',
+      border: `2.5px solid ${isOpen ? st.color : '#1E1B4B'}`,
+      borderRadius: 16,
+      overflow: 'hidden',
+      boxShadow: isOpen ? `4px 4px 0 ${st.color}` : '3px 3px 0 #1E1B4B',
+      transition: 'border-color 0.2s, box-shadow 0.2s',
+    }}>
 
-      {/* Clickable row */}
-      <div onClick={onToggle}
-        style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px', gap: 16, padding: '13px 18px',
-          alignItems: 'center', cursor: 'pointer' }}>
+      {/* Collapsed row */}
+      <div onClick={onToggle} style={{
+        display: 'grid', gridTemplateColumns: '46px 1fr 108px',
+        gap: 14, padding: '14px 18px', alignItems: 'center', cursor: 'pointer', userSelect: 'none',
+      }}>
 
         {/* Priority badge */}
-        <div style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 600,
-          background: project.priority <= 3 ? 'var(--accent-light)' : 'var(--bg)',
-          border: `1px solid ${project.priority <= 3 ? '#C7D7FF' : 'var(--border)'}`,
-          color: project.priority <= 3 ? 'var(--accent)' : 'var(--muted)' }}>
-          {project.priority}
+        <div style={{
+          width: 42, height: 42, borderRadius: 12,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 900,
+          background: project.priority <= 3 ? '#EDE9FE' : '#F3F4F6',
+          border: `2.5px solid ${project.priority <= 3 ? '#7C3AED' : '#9CA3AF'}`,
+          color: project.priority <= 3 ? '#7C3AED' : '#6B7280',
+          boxShadow: project.priority <= 3 ? '2px 2px 0 #7C3AED' : '2px 2px 0 #9CA3AF',
+        }}>
+          #{project.priority}
         </div>
 
-        {/* Main info */}
+        {/* Info */}
         <div>
-          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 4 }}>
-            <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>{project.name}</span>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '2px 6px', borderRadius: 4,
-              background: st.bg, color: st.color, fontWeight: 500 }}>{st.label}</span>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 5 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.92rem' }}>
+              {project.name}
+            </span>
+            <span style={{
+              fontSize: '0.65rem', padding: '3px 9px', borderRadius: 8, fontWeight: 900,
+              background: st.bg, color: st.color, border: `2px solid ${st.color}`,
+              fontFamily: 'var(--font-display)',
+            }}>
+              {st.icon} {st.label}
+            </span>
             {comments.length > 0 && (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', padding: '1px 5px', borderRadius: 4,
-                background: 'var(--accent-light)', color: 'var(--accent)' }}>💬 {comments.length}</span>
+              <span style={{
+                fontSize: '0.62rem', padding: '2px 7px', borderRadius: 8, fontWeight: 900,
+                background: '#EDE9FE', color: '#7C3AED', border: '2px solid #7C3AED',
+              }}>
+                💬 {comments.length}
+              </span>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--muted)',
-              textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>En ce moment ·</span>
-            <span style={{ fontSize: '0.78rem', color: 'var(--text)' }}>{project.currentAction}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: '#A78BFA', flexShrink: 0 }}>▶</span>
+            <span style={{ fontSize: '0.78rem', color: '#4B5563', fontWeight: 500, lineHeight: 1.3 }}>
+              {project.currentAction}
+            </span>
           </div>
         </div>
 
         {/* Progress */}
-        <div style={{ textAlign: 'right' }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', fontWeight: 300, lineHeight: 1,
-            color: project.progress >= 70 ? '#0F8B5A' : project.progress >= 40 ? '#B07D10' : 'var(--muted)' }}>
-            {project.progress}<span style={{ fontSize: '0.7rem' }}>%</span>
+        <div>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '2rem', fontWeight: 900,
+            lineHeight: 1, color: progressColor, textAlign: 'right', marginBottom: 5 }}>
+            {project.progress}<span style={{ fontSize: '0.8rem' }}>%</span>
           </div>
-          <div style={{ height: 3, background: 'var(--bg2)', borderRadius: 99, overflow: 'hidden', marginTop: 4 }}>
+          <div style={{ height: 10, background: '#F3F4F6', borderRadius: 99, overflow: 'hidden',
+            border: '2px solid #E5E7EB', marginBottom: 4 }}>
             <div style={{ height: '100%', width: `${project.progress}%`, borderRadius: 99,
-              background: project.progress >= 70 ? '#0F8B5A' : project.progress >= 40 ? '#F59E0B' : '#C0392B' }} />
+              background: progressGradient, transition: 'width 0.6s ease' }} />
           </div>
-          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--muted)', marginTop: 3 }}>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: '#9CA3AF', textAlign: 'right' }}>
             {doneTasks}/{project.tasks.length} tâches
           </div>
         </div>
       </div>
 
-      {/* Expanded */}
+      {/* Expanded panel */}
       {isOpen && (
-        <div onClick={e => e.stopPropagation()}
-          style={{ borderTop: '1px solid var(--border)', padding: '16px 18px',
-            background: 'var(--bg)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        <div onClick={e => e.stopPropagation()} style={{
+          borderTop: `2.5px solid ${st.color}`,
+          padding: '18px 20px',
+          background: st.bg + '55',
+          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 22,
+        }}>
 
+          {/* Left: next step + tasks */}
           <div>
-            <ELabel>Prochaine étape</ELabel>
-            <div style={{ fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text)',
-              background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
+            <PanelLabel icon="🎯" text="Prochaine étape" color={st.color} />
+            <div style={{
+              fontSize: '0.8rem', lineHeight: 1.55, color: '#374151',
+              background: 'white', border: `2px solid ${st.color}`, borderRadius: 12,
+              padding: '10px 14px', marginBottom: 16,
+              boxShadow: `2px 2px 0 ${st.color}`,
+            }}>
               → {project.nextStep}
             </div>
-            <ELabel>Tâches · {doneTasks}/{project.tasks.length} complétées</ELabel>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+
+            <PanelLabel icon="✔️" text={`Tâches · ${doneTasks}/${project.tasks.length}`} color={st.color} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {project.tasks.map(t => (
-                <div key={t.id} style={{ display: 'flex', gap: 8, fontSize: '0.77rem', alignItems: 'flex-start' }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0, marginTop: 2,
-                    background: t.done ? '#0F8B5A' : 'transparent',
-                    border: t.done ? 'none' : '1.5px solid var(--border2)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.52rem', color: '#fff', fontWeight: 700 }}>
+                <div key={t.id} style={{
+                  display: 'flex', gap: 9, fontSize: '0.78rem', alignItems: 'flex-start',
+                  background: 'white', border: `2px solid ${t.done ? '#059669' : '#E5E7EB'}`,
+                  borderRadius: 10, padding: '7px 11px',
+                  boxShadow: t.done ? '2px 2px 0 #059669' : '1px 1px 0 #E5E7EB',
+                }}>
+                  <div style={{
+                    width: 17, height: 17, borderRadius: 5, flexShrink: 0, marginTop: 1,
+                    background: t.done ? '#059669' : 'white',
+                    border: `2px solid ${t.done ? '#059669' : '#D1D5DB'}`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.58rem', color: 'white', fontWeight: 900,
+                  }}>
                     {t.done && '✓'}
                   </div>
-                  <span style={{ color: t.done ? 'var(--muted)' : 'var(--text)',
-                    textDecoration: t.done ? 'line-through' : 'none', lineHeight: 1.4 }}>{t.label}</span>
+                  <span style={{
+                    color: t.done ? '#9CA3AF' : '#374151',
+                    textDecoration: t.done ? 'line-through' : 'none',
+                    lineHeight: 1.4, fontWeight: t.done ? 400 : 500,
+                  }}>
+                    {t.label}
+                  </span>
                 </div>
               ))}
+              {project.tasks.length === 0 && (
+                <div style={{ fontSize: '0.75rem', color: '#9CA3AF', fontStyle: 'italic', padding: '4px 0' }}>
+                  Aucune tâche renseignée.
+                </div>
+              )}
             </div>
           </div>
 
-          <div>
-            <ELabel>Échanges sur ce projet</ELabel>
-            <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
-              {comments.length === 0
-                ? <span style={{ fontSize: '0.73rem', color: 'var(--muted)', fontStyle: 'italic' }}>Aucun échange pour l'instant.</span>
-                : comments.map(c => <Bubble key={c.id} comment={c} />)}
+          {/* Right: chat */}
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <PanelLabel icon="💬" text="Discussion" color={st.color} />
+
+            {/* Messages */}
+            <div style={{
+              flex: 1, maxHeight: 210, overflowY: 'auto',
+              display: 'flex', flexDirection: 'column', gap: 8,
+              marginBottom: 12, padding: '2px 0',
+            }}>
+              {comments.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px 0' }}>
+                  <div style={{ fontSize: '1.8rem', marginBottom: 6 }}>💬</div>
+                  <div style={{ fontSize: '0.73rem', color: '#9CA3AF', fontStyle: 'italic' }}>
+                    Pas encore d&apos;échanges sur ce projet.
+                  </div>
+                </div>
+              ) : (
+                comments.map(c => <ChatBubble key={c.id} comment={c} />)
+              )}
             </div>
-            <div style={{ display: 'flex', gap: 5, marginBottom: 7 }}>
+
+            {/* Author toggle */}
+            <div style={{ display: 'flex', gap: 7, marginBottom: 9 }}>
               {(['manager', 'valentin'] as const).map(a => (
-                <button key={a} onClick={() => setAuthor(a)}
-                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', fontWeight: 500, padding: '4px 10px', borderRadius: 5, cursor: 'pointer', border: '1px solid',
-                    background: author === a ? (a === 'manager' ? 'var(--accent-light)' : 'var(--green-light)') : 'var(--white)',
-                    borderColor: author === a ? (a === 'manager' ? '#A0B8FF' : '#6EE7B7') : 'var(--border)',
-                    color: author === a ? (a === 'manager' ? 'var(--accent)' : 'var(--green)') : 'var(--muted)' }}>
+                <button key={a} onClick={() => setAuthor(a)} style={{
+                  flex: 1, fontFamily: 'var(--font-display)', fontSize: '0.73rem', fontWeight: 900,
+                  padding: '7px 10px', borderRadius: 10, cursor: 'pointer',
+                  background: author === a ? (a === 'manager' ? '#2563EB' : '#059669') : 'white',
+                  border: `2.5px solid ${author === a ? (a === 'manager' ? '#1D4ED8' : '#047857') : '#E5E7EB'}`,
+                  color: author === a ? 'white' : '#6B7280',
+                  boxShadow: author === a
+                    ? `2px 2px 0 ${a === 'manager' ? '#1D4ED8' : '#047857'}`
+                    : '1px 1px 0 #E5E7EB',
+                  transition: 'all 0.15s',
+                }}>
                   {a === 'manager' ? '👔 Manager' : '💻 Valentin'}
                 </button>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <input value={commentText} onChange={e => setCommentText(e.target.value)}
+
+            {/* Input row */}
+            <div style={{ display: 'flex', gap: 7 }}>
+              <input
+                value={commentText}
+                onChange={e => setCommentText(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && onSend()}
-                placeholder="Votre message… (Entrée)"
-                style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: '0.76rem',
-                  background: 'var(--white)', border: '1px solid var(--border2)',
-                  borderRadius: 6, padding: '6px 10px', color: 'var(--text)', outline: 'none' }} />
-              <button onClick={onSend} disabled={sending || !commentText.trim()}
-                style={{ fontFamily: 'var(--font-body)', fontSize: '0.73rem', fontWeight: 600,
-                  background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '6px 12px',
-                  color: '#fff', cursor: 'pointer', opacity: (sending || !commentText.trim()) ? 0.4 : 1 }}>
-                {sending ? '…' : 'Envoyer'}
+                placeholder={`Message en tant que ${author === 'manager' ? 'Manager' : 'Valentin'}…`}
+                style={{
+                  flex: 1, fontFamily: 'var(--font-body)', fontSize: '0.78rem',
+                  background: 'white', border: '2.5px solid #1E1B4B',
+                  borderRadius: 10, padding: '8px 12px', color: 'var(--text)', outline: 'none',
+                  boxShadow: '2px 2px 0 #1E1B4B',
+                }}
+              />
+              <button
+                onClick={onSend}
+                disabled={sending || !commentText.trim()}
+                style={{
+                  fontFamily: 'var(--font-display)', fontSize: '0.78rem', fontWeight: 900,
+                  background: sending || !commentText.trim() ? '#E5E7EB' : '#7C3AED',
+                  border: `2.5px solid ${sending || !commentText.trim() ? '#D1D5DB' : '#5B21B6'}`,
+                  borderRadius: 10, padding: '8px 14px',
+                  color: sending || !commentText.trim() ? '#9CA3AF' : 'white',
+                  cursor: sending || !commentText.trim() ? 'not-allowed' : 'pointer',
+                  boxShadow: sending || !commentText.trim() ? 'none' : '2px 2px 0 #5B21B6',
+                  transition: 'all 0.15s',
+                }}>
+                {sending ? '…' : 'Envoyer →'}
               </button>
             </div>
           </div>
@@ -332,23 +621,53 @@ function ProjectRow({ project, animDelay, comments, isOpen, onToggle, commentTex
   );
 }
 
-function Bubble({ comment }: { comment: Comment }) {
+/* ─── Chat Bubble ────────────────────────────────────────────── */
+function ChatBubble({ comment }: { comment: Comment }) {
   const isM = comment.author === 'manager';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: isM ? 'flex-start' : 'flex-end' }}>
-      <div style={{ maxWidth: '90%', padding: '6px 10px', borderRadius: 7, fontSize: '0.76rem', lineHeight: 1.4,
-        background: isM ? 'var(--accent-light)' : 'var(--green-light)',
-        border: `1px solid ${isM ? '#C7D7FF' : '#A7F3D0'}`, color: 'var(--text)' }}>
-        {comment.text}
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 7, flexDirection: isM ? 'row' : 'row-reverse' }}>
+        {/* Avatar */}
+        <div style={{
+          width: 28, height: 28, borderRadius: 9, flexShrink: 0,
+          background: isM ? '#DBEAFE' : '#D1FAE5',
+          border: `2px solid ${isM ? '#2563EB' : '#059669'}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.85rem',
+        }}>
+          {isM ? '👔' : '💻'}
+        </div>
+        {/* Bubble */}
+        <div style={{
+          maxWidth: '78%', padding: '8px 13px',
+          borderRadius: isM ? '6px 14px 14px 14px' : '14px 6px 14px 14px',
+          fontSize: '0.78rem', lineHeight: 1.5,
+          background: isM ? '#DBEAFE' : '#D1FAE5',
+          border: `2px solid ${isM ? '#2563EB' : '#059669'}`,
+          color: '#1F2937',
+          boxShadow: `2px 2px 0 ${isM ? '#1D4ED8' : '#047857'}`,
+        }}>
+          {comment.text}
+        </div>
       </div>
-      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--muted)', marginTop: 2 }}>
-        {isM ? '👔' : '💻'} {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      <span style={{
+        fontFamily: 'var(--font-mono)', fontSize: '0.55rem', color: '#9CA3AF', marginTop: 3,
+        paddingLeft: isM ? 35 : 0, paddingRight: isM ? 0 : 35,
+      }}>
+        {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
       </span>
     </div>
   );
 }
 
-function ELabel({ children }: { children: React.ReactNode }) {
-  return <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.59rem', textTransform: 'uppercase',
-    letterSpacing: '0.08em', color: 'var(--muted)', marginBottom: 7 }}>{children}</div>;
+/* ─── Panel label ────────────────────────────────────────────── */
+function PanelLabel({ icon, text, color }: { icon: string; text: string; color: string }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 9 }}>
+      <span style={{ fontSize: '0.85rem' }}>{icon}</span>
+      <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.68rem', fontWeight: 900,
+        textTransform: 'uppercase', letterSpacing: '0.07em', color }}>
+        {text}
+      </span>
+    </div>
+  );
 }

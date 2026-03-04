@@ -2,30 +2,52 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,300&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg: #F7F5F0;
-  --bg2: #EFECEA;
+  /* Base */
+  --bg: #F0EEFF;
+  --bg2: #E6E0FF;
   --white: #FFFFFF;
-  --border: #E2DDD8;
-  --border2: #CEC9C2;
-  --text: #1A1714;
-  --muted: #8A8178;
-  --accent: #1A5CFF;
-  --accent-light: #EEF2FF;
-  --green: #0F8B5A;
-  --green-light: #E8F5EF;
-  --orange: #D4520A;
-  --orange-light: #FEF0E7;
-  --red: #C0392B;
-  --red-light: #FDECEA;
-  --yellow: #B07D10;
-  --yellow-light: #FEF8E7;
+  --border: #1E1B4B;
+  --border-light: #C4B5FD;
+  --text: #1E1B4B;
+  --muted: #6D6A8A;
 
-  --font-display: 'Fraunces', Georgia, serif;
+  /* Status palette */
+  --purple: #7C3AED;
+  --purple-light: #EDE9FE;
+  --blue: #2563EB;
+  --blue-light: #DBEAFE;
+  --green: #059669;
+  --green-light: #D1FAE5;
+  --orange: #EA580C;
+  --orange-light: #FFEDD5;
+  --red: #DC2626;
+  --red-light: #FEE2E2;
+  --yellow: #D97706;
+  --yellow-light: #FEF3C7;
+  --pink: #DB2777;
+  --pink-light: #FCE7F3;
+  --teal: #0891B2;
+  --teal-light: #CFFAFE;
+
+  /* Primary accent */
+  --accent: #7C3AED;
+  --accent-light: #EDE9FE;
+
+  /* Game */
+  --xp-gold: #F59E0B;
+
+  /* Fonts */
+  --font-display: 'Nunito', 'DM Sans', sans-serif;
   --font-body: 'DM Sans', system-ui, sans-serif;
   --font-mono: 'DM Mono', monospace;
+
+  /* Cartoon shadows */
+  --shadow-card: 4px 4px 0px #1E1B4B;
+  --shadow-card-sm: 2px 2px 0px #1E1B4B;
+  --shadow-card-hover: 6px 6px 0px #1E1B4B;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -37,14 +59,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-::selection { background: #1A5CFF22; }
+::selection { background: #7C3AED33; }
 
-::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
 
+/* ─── Animations ───────────────────────────────────────── */
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: 0; transform: translateY(20px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -53,5 +76,55 @@ body {
   to   { opacity: 1; }
 }
 
-.slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.fade-in  { animation: fadeIn 0.4s ease both; }
+@keyframes bounceIn {
+  0%   { transform: scale(0.85); opacity: 0; }
+  60%  { transform: scale(1.04); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.35); }
+  50%       { box-shadow: 0 0 0 7px rgba(124, 58, 237, 0); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-4px); }
+}
+
+.slide-up  { animation: slideUp  0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.fade-in   { animation: fadeIn   0.35s ease both; }
+.bounce-in { animation: bounceIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.pulse-glow { animation: pulse-glow 2s infinite; }
+.float     { animation: float 3s ease-in-out infinite; }
+
+/* ─── XP bar shimmer ───────────────────────────────────── */
+.xp-bar {
+  background: linear-gradient(90deg, #F59E0B 0%, #EF4444 40%, #A855F7 70%, #F59E0B 100%);
+  background-size: 200% auto;
+  animation: shimmer 3s linear infinite;
+}
+
+/* ─── Cartoon card base ─────────────────────────────────── */
+.card {
+  background: var(--white);
+  border: 2px solid var(--border);
+  border-radius: 16px;
+  box-shadow: var(--shadow-card);
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+.card:hover {
+  box-shadow: var(--shadow-card-hover);
+  transform: translate(-1px, -1px);
+}
+
+/* ─── Input reset ───────────────────────────────────────── */
+input, textarea, select, button {
+  font-family: var(--font-body);
+}
