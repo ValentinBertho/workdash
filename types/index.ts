@@ -72,3 +72,12 @@ export interface ManagerTask {
   createdAt: string;
   note?: string;
 }
+
+export interface DecisionPoint {
+  id: string;
+  text: string;
+  status: 'open' | 'decided' | 'deferred';
+  resolution?: string;
+  createdAt: string;
+  updatedAt?: string;
+}

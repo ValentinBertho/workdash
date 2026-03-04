@@ -2,52 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=DM+Mono:wght@400;500&display=swap');
 
 :root {
-  /* Base */
-  --bg: #F0EEFF;
-  --bg2: #E6E0FF;
-  --white: #FFFFFF;
-  --border: #1E1B4B;
-  --border-light: #C4B5FD;
-  --text: #1E1B4B;
-  --muted: #6D6A8A;
+  /* Backgrounds */
+  --bg:         #F8FAFC;
+  --surface:    #FFFFFF;
+  --surface-2:  #F1F5F9;
 
-  /* Status palette */
-  --purple: #7C3AED;
-  --purple-light: #EDE9FE;
-  --blue: #2563EB;
-  --blue-light: #DBEAFE;
-  --green: #059669;
-  --green-light: #D1FAE5;
-  --orange: #EA580C;
-  --orange-light: #FFEDD5;
-  --red: #DC2626;
-  --red-light: #FEE2E2;
-  --yellow: #D97706;
-  --yellow-light: #FEF3C7;
-  --pink: #DB2777;
-  --pink-light: #FCE7F3;
-  --teal: #0891B2;
-  --teal-light: #CFFAFE;
+  /* Borders */
+  --border:     #E2E8F0;
+  --border-2:   #CBD5E1;
 
-  /* Primary accent */
-  --accent: #7C3AED;
-  --accent-light: #EDE9FE;
+  /* Text */
+  --text:       #0F172A;
+  --text-2:     #475569;
+  --text-3:     #94A3B8;
 
-  /* Game */
-  --xp-gold: #F59E0B;
+  /* Accent — indigo */
+  --accent:        #6366F1;
+  --accent-dark:   #4338CA;
+  --accent-light:  #EEF2FF;
+  --accent-border: #C7D2FE;
+
+  /* Status */
+  --s-active-color:  #6366F1; --s-active-bg:   #EEF2FF; --s-active-border: #C7D2FE;
+  --s-deploy-color:  #D97706; --s-deploy-bg:   #FFFBEB; --s-deploy-border: #FDE68A;
+  --s-done-color:    #059669; --s-done-bg:     #ECFDF5; --s-done-border:   #A7F3D0;
+  --s-blocked-color: #DC2626; --s-blocked-bg:  #FEF2F2; --s-blocked-border:#FECACA;
+  --s-frame-color:   #64748B; --s-frame-bg:    #F8FAFC; --s-frame-border:  #E2E8F0;
+
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-sm: 0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
+  --shadow-md: 0 4px 8px rgba(15,23,42,0.08), 0 2px 4px rgba(15,23,42,0.04);
+  --shadow-lg: 0 12px 24px rgba(15,23,42,0.10), 0 4px 8px rgba(15,23,42,0.06);
 
   /* Fonts */
-  --font-display: 'Nunito', 'DM Sans', sans-serif;
-  --font-body: 'DM Sans', system-ui, sans-serif;
-  --font-mono: 'DM Mono', monospace;
-
-  /* Cartoon shadows */
-  --shadow-card: 4px 4px 0px #1E1B4B;
-  --shadow-card-sm: 2px 2px 0px #1E1B4B;
-  --shadow-card-hover: 6px 6px 0px #1E1B4B;
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-body:    'Inter', system-ui, sans-serif;
+  --font-mono:    'DM Mono', monospace;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -57,17 +51,19 @@ body {
   color: var(--text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
 }
 
-::selection { background: #7C3AED33; }
+::selection { background: #6366F122; }
 
-::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
 
 /* ─── Animations ───────────────────────────────────────── */
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(20px); }
+  from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -76,78 +72,30 @@ body {
   to   { opacity: 1; }
 }
 
-@keyframes bounceIn {
-  0%   { transform: scale(0.85); opacity: 0; }
-  60%  { transform: scale(1.04); }
-  100% { transform: scale(1); opacity: 1; }
+@keyframes progressFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
 
-@keyframes shimmer {
-  0%   { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
+.slide-up { animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.fade-in  { animation: fadeIn  0.25s ease both; }
 
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.35); }
-  50%       { box-shadow: 0 0 0 7px rgba(124, 58, 237, 0); }
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50%       { transform: translateY(-4px); }
-}
-
-.slide-up  { animation: slideUp  0.45s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.fade-in   { animation: fadeIn   0.35s ease both; }
-.bounce-in { animation: bounceIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.pulse-glow { animation: pulse-glow 2s infinite; }
-.float     { animation: float 3s ease-in-out infinite; }
-
-/* ─── XP bar shimmer ───────────────────────────────────── */
-.xp-bar {
-  background: linear-gradient(90deg, #F59E0B 0%, #EF4444 40%, #A855F7 70%, #F59E0B 100%);
-  background-size: 200% auto;
-  animation: shimmer 3s linear infinite;
-}
-
-/* ─── Cartoon card base ─────────────────────────────────── */
-.card {
-  background: var(--white);
-  border: 2px solid var(--border);
-  border-radius: 16px;
-  box-shadow: var(--shadow-card);
-  transition: box-shadow 0.15s ease, transform 0.15s ease;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-card-hover);
-  transform: translate(-1px, -1px);
-}
-
-/* ─── Input reset ───────────────────────────────────────── */
+/* ─── Input / button reset ─────────────────────────────── */
 input, textarea, select, button {
   font-family: var(--font-body);
 }
 
+/* ─── Focus ring ────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ─── Print / PDF ───────────────────────────────────────── */
 @media print {
-  @page { size: A4; margin: 16mm 14mm; }
-
+  @page { size: A4; margin: 14mm 12mm; }
   body { background: white !important; }
-
-  header, .no-print-hide, button, input, select, textarea { display: none !important; }
-
-  #print-root { padding: 0 !important; }
-
-  /* Remove cartoon shadows & borders for clean print */
+  header, .no-print { display: none !important; }
   * { box-shadow: none !important; animation: none !important; }
-
-  /* Show cards with simple border */
-  [style*="border-radius"] { border-radius: 6px !important; }
-
-  /* Expand all project cards */
-  [style*="overflow: hidden"] { overflow: visible !important; }
-
-  /* Section breaks */
   .slide-up { page-break-inside: avoid; }
 }

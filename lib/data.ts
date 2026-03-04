@@ -1,5 +1,5 @@
 import { Redis } from '@upstash/redis';
-import { DashboardData, Comment, ChangelogEntry, ManagerTask } from '@/types';
+import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint } from '@/types';
 
 const kv = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
@@ -10,6 +10,13 @@ const DATA_KEY          = 'dashboard:data';
 const COMMENTS_KEY      = 'dashboard:comments';
 const CHANGELOG_KEY     = 'dashboard:changelog';
 const MANAGER_TASKS_KEY = 'dashboard:manager-tasks';
+const DECISIONS_KEY     = 'dashboard:decisions';
+
+const DEFAULT_DECISIONS: DecisionPoint[] = [
+  { id: 'dp1', text: "Brouillon mail via API GRAPH — confirmer l'implémentation ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
+  { id: 'dp2', text: "NDF : ajout analytique + suppression d'un frais — priorité et délai ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
+  { id: 'dp3', text: "Outil d'Audit : lancer CRON auto + réconciliation + paramétrage dynamique ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
+];
 
 /* ─── Dashboard data ─────────────────────────────────────────── */
 export const defaultData: DashboardData = {
@@ -193,4 +200,27 @@ export async function updateManagerTask(id: string, updates: Partial<ManagerTask
 export async function deleteManagerTask(id: string): Promise<void> {
   const existing = await getManagerTasks();
   await kv.set(MANAGER_TASKS_KEY, existing.filter(t => t.id !== id));
+}
+
+/* ─── Decision points ────────────────────────────────────── */
+export async function getDecisions(): Promise<DecisionPoint[]> {
+  try {
+    const d = await kv.get<DecisionPoint[]>(DECISIONS_KEY);
+    return d ?? DEFAULT_DECISIONS;
+  } catch { return DEFAULT_DECISIONS; }
+}
+
+export async function saveDecision(decision: DecisionPoint): Promise<void> {
+  const existing = await getDecisions();
+  await kv.set(DECISIONS_KEY, [...existing, decision]);
+}
+
+export async function updateDecision(id: string, updates: Partial<DecisionPoint>): Promise<void> {
+  const existing = await getDecisions();
+  await kv.set(DECISIONS_KEY, existing.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d));
+}
+
+export async function deleteDecision(id: string): Promise<void> {
+  const existing = await getDecisions();
+  await kv.set(DECISIONS_KEY, existing.filter(d => d.id !== id));
 }
