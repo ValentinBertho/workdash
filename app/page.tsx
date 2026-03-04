@@ -1,316 +1,354 @@
 'use client';
 import { useEffect, useState, useCallback } from 'react';
-import { DashboardData, Comment, Project } from '@/types';
+import { DashboardData, Comment, Project, Status } from '@/types';
 
-const PRIORITY_COLOR: Record<string, string> = {
-  high: '#f7534f',
-  med: '#f7d44f',
-  low: '#4fc987',
+/* ─── Status config ─────────────────────────────────────────── */
+const STATUS: Record<Status, { label: string; color: string; bg: string }> = {
+  'en-cours':   { label: 'En cours',   color: '#1A5CFF', bg: '#EEF2FF' },
+  'a-deployer': { label: 'À déployer', color: '#B07D10', bg: '#FEF8E7' },
+  'ok':         { label: 'OK ✓',       color: '#0F8B5A', bg: '#E8F5EF' },
+  'bloque':     { label: 'Bloqué',     color: '#C0392B', bg: '#FDECEA' },
+  'a-cadrer':   { label: 'À cadrer',   color: '#8A8178', bg: '#F2EFE9' },
 };
 
-const STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  'en-cours':   { bg: 'rgba(79,142,247,0.12)', color: '#4f8ef7', label: 'En cours' },
-  'a-deployer': { bg: 'rgba(247,212,79,0.12)', color: '#f7d44f', label: 'À déployer' },
-  'ok':         { bg: 'rgba(79,201,135,0.12)', color: '#4fc987', label: 'OK' },
-  'bloque':     { bg: 'rgba(247,83,79,0.12)',  color: '#f7534f', label: 'À arbitrer' },
-  'a-cadrer':   { bg: 'rgba(247,83,79,0.12)',  color: '#f7534f', label: 'À cadrer' },
-};
-
-function getWeekNum(d: Date) {
-  const start = new Date(d.getFullYear(), 0, 1);
-  return Math.ceil(((d.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+function getWeek(d: Date) {
+  const s = new Date(d.getFullYear(), 0, 1);
+  return Math.ceil(((d.getTime() - s.getTime()) / 86400000 + s.getDay() + 1) / 7);
 }
 
-export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
+export default function Page() {
+  const [data, setData]       = useState<DashboardData | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
-  const [openProject, setOpenProject] = useState<string | null>(null);
+  const [openId, setOpenId]   = useState<string | null>(null);
   const [commentText, setCommentText] = useState('');
-  const [author, setAuthor] = useState<'manager' | 'valentin'>('manager');
+  const [author, setAuthor]   = useState<'manager' | 'valentin'>('manager');
   const [sending, setSending] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
 
   const load = useCallback(async () => {
     const [d, c] = await Promise.all([
       fetch('/api/projects').then(r => r.json()),
       fetch('/api/comments').then(r => r.json()),
     ]);
-    setData(d);
-    setComments(c);
+    setData(d); setComments(c);
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const sendComment = async () => {
-    if (!commentText.trim() || !openProject) return;
+    if (!commentText.trim() || !openId) return;
     setSending(true);
     await fetch('/api/comments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: commentText.trim(), projectId: openProject, author }),
+      body: JSON.stringify({ text: commentText.trim(), projectId: openId, author }),
     });
-    setCommentText('');
-    await load();
-    setSending(false);
+    setCommentText(''); await load(); setSending(false);
   };
 
   if (!data) return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="mono text-sm" style={{ color: 'var(--muted)' }}>Chargement...</div>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', color: 'var(--muted)' }}>Chargement…</span>
     </div>
   );
 
-  const done = data.weeklyTodos.filter(t => t.done).length;
-  const total = data.weeklyTodos.length;
-  const now = new Date();
-  const projComments = (pid: string) => comments.filter(c => c.projectId === pid);
+  const now    = new Date();
+  const doneTodos = data.weeklyTodos.filter(t => t.done).length;
+  const sorted = [...data.projects].sort((a, b) => a.priority - b.priority);
+  const inProgress  = sorted.filter(p => p.status === 'en-cours');
+  const readyDeploy = sorted.filter(p => p.status === 'a-deployer');
+  const done_ok     = sorted.filter(p => p.status === 'ok');
+  const blocked     = sorted.filter(p => p.status === 'bloque' || p.status === 'a-cadrer');
+
+  const commentProps = { commentText, setCommentText, author, setAuthor, onSend: sendComment, sending };
 
   return (
-    <div style={{ background: 'var(--bg)', minHeight: '100vh', padding: '32px 28px',
-      backgroundImage: 'radial-gradient(ellipse at 10% 0%, #1a2040 0%, transparent 60%), radial-gradient(ellipse at 90% 100%, #1a1530 0%, transparent 50%)' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
 
-      {/* Header */}
-      <header className="anim-down flex items-start justify-between mb-10 pb-7"
-        style={{ borderBottom: '1px solid var(--border)' }}>
-        <div>
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1,
-            background: 'linear-gradient(135deg, #e8eaf0 40%, #4f8ef7)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Charge de Travail
-          </h1>
-          <div className="mono mt-2" style={{ fontSize: '0.7rem', color: 'var(--muted)', letterSpacing: '0.08em', textTransform: 'uppercase' }}>
-            // Valentin · MISMO · Vue Manager
+      {/* Top bar */}
+      <header style={{ background: 'var(--white)', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 40px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 14 }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 600, letterSpacing: '-0.02em' }}>
+              Charge de travail
+            </span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)' }}>Valentin · MISMO</span>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="mono" style={{ fontSize: '0.7rem', background: 'var(--surface2)', border: '1px solid var(--border)',
-            padding: '6px 12px', borderRadius: 4, color: 'var(--muted)', letterSpacing: '0.06em' }}>
-            Semaine {getWeekNum(now)} — {now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.68rem', color: 'var(--muted)' }}>
+              Semaine {getWeek(now)} · {now.toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </span>
+            <a href="/admin" style={{ fontFamily: 'var(--font-body)', fontSize: '0.75rem', fontWeight: 500,
+              color: 'var(--accent)', textDecoration: 'none', padding: '5px 12px', borderRadius: 6,
+              background: 'var(--accent-light)', border: '1px solid #C7D7FF' }}>Admin →</a>
           </div>
-          <button onClick={() => setPanelOpen(p => !p)}
-            style={{ background: 'var(--surface2)', border: '1px solid var(--border)', padding: '6px 14px',
-              borderRadius: 4, color: '#4f8ef7', cursor: 'pointer', fontSize: '0.78rem', fontFamily: 'inherit', fontWeight: 600 }}>
-            💬 Échanges ({comments.length})
-          </button>
         </div>
       </header>
 
-      {/* Stats */}
-      <div className="anim-up grid gap-3 mb-10" style={{ gridTemplateColumns: 'repeat(4,1fr)', animationDelay: '0.05s' }}>
-        {[
-          { label: 'Projets actifs', val: data.projects.length, color: '#4f8ef7' },
-          { label: 'Tâches semaine OK', val: done, color: '#4fc987' },
-          { label: 'Tâches en attente', val: total - done, color: '#f7d44f' },
-          { label: 'Échanges', val: comments.length, color: '#f7a24f' },
-        ].map(s => (
-          <div key={s.label} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 20,
-            borderTop: `2px solid ${s.color}` }}>
-            <div style={{ fontSize: '2rem', fontWeight: 800, color: s.color, lineHeight: 1 }}>{s.val}</div>
-            <div className="mono mt-1" style={{ fontSize: '0.65rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{s.label}</div>
-          </div>
-        ))}
-      </div>
+      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '32px 40px' }}>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20, alignItems: 'start' }}>
-
-        {/* Projects */}
-        <div className="anim-up" style={{ animationDelay: '0.1s' }}>
-          <SectionTitle>Projets 2026</SectionTitle>
-          {data.projects.map(p => (
-            <ProjectCard key={p.id} project={p} comments={projComments(p.id)}
-              isOpen={openProject === p.id}
-              onToggle={() => setOpenProject(o => o === p.id ? null : p.id)}
-              commentText={commentText} setCommentText={setCommentText}
-              author={author} setAuthor={setAuthor}
-              onSend={sendComment} sending={sending} />
+        {/* KPI strip */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', gap: 10, marginBottom: 36 }}>
+          {[
+            { label: 'Projets actifs',      val: data.projects.length, color: 'var(--text)' },
+            { label: 'En cours',             val: inProgress.length,    color: '#1A5CFF' },
+            { label: 'Prêts à déployer',     val: readyDeploy.length,   color: '#B07D10' },
+            { label: 'Tâches semaine',        val: `${doneTodos}/${data.weeklyTodos.length}`, color: '#0F8B5A' },
+            { label: 'Échanges',             val: comments.length,      color: 'var(--muted)' },
+          ].map(k => (
+            <div key={k.label} style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '16px 18px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.9rem', fontWeight: 300, color: k.color, lineHeight: 1 }}>{k.val}</div>
+              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.63rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.07em', marginTop: 5 }}>{k.label}</div>
+            </div>
           ))}
         </div>
 
-        {/* Right sidebar */}
-        <div className="anim-up flex flex-col gap-4" style={{ animationDelay: '0.15s' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 272px', gap: 24, alignItems: 'start' }}>
 
-          {/* Weekly */}
-          <Panel title="To-do semaine">
-            <div className="mono mb-3" style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>
-              {done}/{total} complétées
-            </div>
-            <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, marginBottom: 14, overflow: 'hidden' }}>
-              <div style={{ height: '100%', width: `${(done/total)*100}%`, background: '#4fc987', borderRadius: 2, transition: 'width 1s ease' }} />
-            </div>
-            {data.weeklyTodos.map(t => (
-              <div key={t.id} className="flex items-start gap-2" style={{ padding: '7px 0', borderBottom: '1px solid var(--border)', fontSize: '0.8rem' }}>
-                <div style={{ width: 14, height: 14, borderRadius: 2, flexShrink: 0, marginTop: 2,
-                  background: t.done ? '#4fc987' : 'transparent', border: t.done ? 'none' : '1.5px solid var(--border)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: '#000' }}>
-                  {t.done && '✓'}
+          {/* Projects */}
+          <div>
+            {[
+              { title: 'En cours',            accent: '#1A5CFF', items: inProgress },
+              { title: 'Prêt à déployer',     accent: '#F59E0B', items: readyDeploy },
+              { title: 'Terminé / OK',         accent: '#0F8B5A', items: done_ok },
+              { title: 'À arbitrer / cadrer',  accent: '#C0392B', items: blocked },
+            ].filter(s => s.items.length > 0).map(section => (
+              <div key={section.title} style={{ marginBottom: 30 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <div style={{ width: 3, height: 16, background: section.accent, borderRadius: 2 }} />
+                  <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.95rem', fontWeight: 600, letterSpacing: '-0.01em' }}>
+                    {section.title}
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: 'var(--muted)' }}>
+                    {section.items.length} projet{section.items.length > 1 ? 's' : ''}
+                  </span>
                 </div>
-                <span style={{ color: t.done ? 'var(--muted)' : 'var(--text)', textDecoration: t.done ? 'line-through' : 'none' }}>
-                  {t.label}
-                </span>
-              </div>
-            ))}
-          </Panel>
-
-          {/* General comments panel */}
-          {panelOpen && (
-            <Panel title="Échanges généraux">
-              <div className="flex flex-col gap-2 mb-3" style={{ maxHeight: 240, overflowY: 'auto' }}>
-                {comments.filter(c => c.projectId === 'general').length === 0 && (
-                  <div className="mono" style={{ fontSize: '0.68rem', color: 'var(--muted)' }}>Aucun échange pour l'instant.</div>
-                )}
-                {comments.filter(c => c.projectId === 'general').map(c => (
-                  <CommentBubble key={c.id} comment={c} />
+                {section.items.map((p, i) => (
+                  <ProjectRow key={p.id} project={p} animDelay={i * 0.04}
+                    comments={comments.filter(c => c.projectId === p.id)}
+                    isOpen={openId === p.id}
+                    onToggle={() => setOpenId(o => o === p.id ? null : p.id)}
+                    {...commentProps} />
                 ))}
               </div>
-              <CommentInput projectId="general" author={author} setAuthor={setAuthor}
-                text={commentText} setText={setCommentText} onSend={sendComment} sending={sending} />
-            </Panel>
-          )}
-
-          {/* Legend */}
-          <Panel title="Légende priorités">
-            {[['high','Priorité haute'],['med','Priorité moyenne'],['low','Priorité basse']].map(([k,v]) => (
-              <div key={k} className="flex items-center gap-2 mb-2" style={{ fontSize: '0.78rem' }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: PRIORITY_COLOR[k],
-                  boxShadow: `0 0 5px ${PRIORITY_COLOR[k]}` }} />
-                <span style={{ color: 'var(--muted)' }}>{v}</span>
-              </div>
             ))}
-          </Panel>
+          </div>
+
+          {/* Sidebar */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Weekly todos */}
+            <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 600, marginBottom: 12, letterSpacing: '-0.01em' }}>
+                Semaine en cours
+              </div>
+              {/* Progress bar */}
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: '0.75rem', color: 'var(--muted)' }}>{doneTodos} sur {data.weeklyTodos.length}</span>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.7rem', color: '#0F8B5A', fontWeight: 500 }}>
+                    {Math.round(doneTodos / data.weeklyTodos.length * 100)}%
+                  </span>
+                </div>
+                <div style={{ height: 4, background: 'var(--bg2)', borderRadius: 99, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${doneTodos / data.weeklyTodos.length * 100}%`,
+                    background: 'linear-gradient(90deg,#0F8B5A,#34D399)', borderRadius: 99 }} />
+                </div>
+              </div>
+              {data.weeklyTodos.map(t => (
+                <div key={t.id} style={{ display: 'flex', gap: 9, padding: '5px 0', borderBottom: '1px solid var(--border)', alignItems: 'flex-start' }}>
+                  <div style={{ width: 15, height: 15, borderRadius: 3, flexShrink: 0, marginTop: 2,
+                    background: t.done ? '#0F8B5A' : 'transparent',
+                    border: t.done ? 'none' : '1.5px solid var(--border2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '0.55rem', color: '#fff', fontWeight: 700 }}>
+                    {t.done ? '✓' : ''}
+                  </div>
+                  <span style={{ fontSize: '0.76rem', lineHeight: 1.4,
+                    color: t.done ? 'var(--muted)' : 'var(--text)',
+                    textDecoration: t.done ? 'line-through' : 'none' }}>{t.label}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Decision points */}
+            <div style={{ background: 'var(--white)', border: '1px solid var(--border)', borderRadius: 10, padding: '18px 20px' }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 600, marginBottom: 12, letterSpacing: '-0.01em' }}>
+                Points à décider
+              </div>
+              {[
+                'Créer brouillon mail depuis API GRAPH → Todo YN',
+                "NDF : Ajout analytique + suppression d'un frais",
+                "Outil d'Audit : CRON, réconciliation auto, paramétrage dynamique",
+              ].map((q, i) => (
+                <div key={i} style={{ display: 'flex', gap: 8, padding: '7px 0', borderBottom: i < 2 ? '1px solid var(--border)' : 'none', alignItems: 'flex-start' }}>
+                  <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: '#D4520A',
+                    background: '#FEF0E7', borderRadius: 3, padding: '1px 5px', flexShrink: 0, marginTop: 2 }}>?</span>
+                  <span style={{ fontSize: '0.76rem', lineHeight: 1.4 }}>{q}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Last updated */}
+            <div style={{ textAlign: 'center', fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--muted)' }}>
+              Mis à jour · {new Date(data.updatedAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+            </div>
+          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
 
-function ProjectCard({ project, comments, isOpen, onToggle, commentText, setCommentText, author, setAuthor, onSend, sending }:
-  { project: Project; comments: Comment[]; isOpen: boolean; onToggle: () => void;
-    commentText: string; setCommentText: (v:string)=>void; author: 'manager'|'valentin'; setAuthor: (v:'manager'|'valentin')=>void;
-    onSend: ()=>void; sending: boolean }) {
-  const st = STATUS_STYLE[project.status];
-  const doneCount = project.tasks.filter(t => t.done).length;
+/* ─── Project row ───────────────────────────────────────────── */
+function ProjectRow({ project, animDelay, comments, isOpen, onToggle, commentText, setCommentText, author, setAuthor, onSend, sending }:
+  { project: Project; animDelay: number; comments: Comment[]; isOpen: boolean; onToggle: () => void;
+    commentText: string; setCommentText: (v: string) => void; author: 'manager' | 'valentin';
+    setAuthor: (v: 'manager' | 'valentin') => void; onSend: () => void; sending: boolean }) {
+
+  const st = STATUS[project.status];
+  const doneTasks = project.tasks.filter(t => t.done).length;
 
   return (
-    <div onClick={onToggle} style={{ background: 'var(--surface)', border: `1px solid ${isOpen ? '#4f8ef7' : 'var(--border)'}`,
-      borderRadius: 8, padding: '16px 18px', marginBottom: 10, cursor: 'pointer',
-      transition: 'border-color 0.2s, transform 0.15s', transform: isOpen ? 'translateX(3px)' : 'none' }}>
+    <div style={{ animationDelay: `${animDelay}s`,
+      background: 'var(--white)', border: `1px solid ${isOpen ? '#A0B8FF' : 'var(--border)'}`,
+      borderRadius: 10, marginBottom: 8, overflow: 'hidden',
+      boxShadow: isOpen ? '0 0 0 3px #EEF2FF' : '0 1px 2px rgba(0,0,0,0.03)',
+      transition: 'border-color 0.15s, box-shadow 0.15s' }}>
 
-      <div className="flex items-start justify-between">
-        <div className="flex items-center gap-2 mb-3">
-          <div style={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, marginTop: 1,
-            background: PRIORITY_COLOR[project.priority], boxShadow: `0 0 5px ${PRIORITY_COLOR[project.priority]}` }} />
-          <span style={{ fontWeight: 700, fontSize: '0.92rem' }}>{project.name}</span>
-          {comments.length > 0 && (
-            <span className="mono" style={{ fontSize: '0.6rem', background: 'rgba(79,142,247,0.15)',
-              color: '#4f8ef7', padding: '1px 6px', borderRadius: 3 }}>💬 {comments.length}</span>
-          )}
+      {/* Clickable row */}
+      <div onClick={onToggle}
+        style={{ display: 'grid', gridTemplateColumns: '40px 1fr 90px', gap: 16, padding: '13px 18px',
+          alignItems: 'center', cursor: 'pointer' }}>
+
+        {/* Priority badge */}
+        <div style={{ width: 34, height: 34, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 600,
+          background: project.priority <= 3 ? 'var(--accent-light)' : 'var(--bg)',
+          border: `1px solid ${project.priority <= 3 ? '#C7D7FF' : 'var(--border)'}`,
+          color: project.priority <= 3 ? 'var(--accent)' : 'var(--muted)' }}>
+          {project.priority}
         </div>
-        <div style={{ textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ width: 72, height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden', marginBottom: 4, marginLeft: 'auto' }}>
-            <div style={{ height: '100%', width: `${project.progress}%`, borderRadius: 2,
-              background: project.progress >= 70 ? '#4fc987' : project.progress >= 40 ? '#f7d44f' : '#f7534f' }} />
+
+        {/* Main info */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7, marginBottom: 4 }}>
+            <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>{project.name}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', padding: '2px 6px', borderRadius: 4,
+              background: st.bg, color: st.color, fontWeight: 500 }}>{st.label}</span>
+            {comments.length > 0 && (
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', padding: '1px 5px', borderRadius: 4,
+                background: 'var(--accent-light)', color: 'var(--accent)' }}>💬 {comments.length}</span>
+            )}
           </div>
-          <div className="mono" style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>{project.progress}%</div>
-          <div className="mono mt-1" style={{ fontSize: '0.58rem', textTransform: 'uppercase', letterSpacing: '0.05em',
-            padding: '2px 6px', borderRadius: 3, background: st.bg, color: st.color, border: `1px solid ${st.color}44` }}>
-            {st.label}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--muted)',
+              textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0 }}>En ce moment ·</span>
+            <span style={{ fontSize: '0.78rem', color: 'var(--text)' }}>{project.currentAction}</span>
+          </div>
+        </div>
+
+        {/* Progress */}
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.6rem', fontWeight: 300, lineHeight: 1,
+            color: project.progress >= 70 ? '#0F8B5A' : project.progress >= 40 ? '#B07D10' : 'var(--muted)' }}>
+            {project.progress}<span style={{ fontSize: '0.7rem' }}>%</span>
+          </div>
+          <div style={{ height: 3, background: 'var(--bg2)', borderRadius: 99, overflow: 'hidden', marginTop: 4 }}>
+            <div style={{ height: '100%', width: `${project.progress}%`, borderRadius: 99,
+              background: project.progress >= 70 ? '#0F8B5A' : project.progress >= 40 ? '#F59E0B' : '#C0392B' }} />
+          </div>
+          <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.58rem', color: 'var(--muted)', marginTop: 3 }}>
+            {doneTasks}/{project.tasks.length} tâches
           </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1">
-        {project.tasks.map(t => (
-          <span key={t.id} className="mono" style={{ fontSize: '0.62rem', padding: '2px 7px', borderRadius: 3,
-            background: t.done ? 'rgba(79,201,135,0.07)' : 'rgba(247,162,79,0.07)',
-            border: `1px solid ${t.done ? 'rgba(79,201,135,0.25)' : 'rgba(247,162,79,0.25)'}`,
-            color: t.done ? '#4fc987' : '#f7a24f', textDecoration: t.done ? 'line-through' : 'none', opacity: t.done ? 0.7 : 1 }}>
-            {t.done ? '✓' : '↻'} {t.label}
-          </span>
-        ))}
-      </div>
-
-      <div className="mono mt-2" style={{ fontSize: '0.6rem', color: 'var(--muted)' }}>
-        {doneCount}/{project.tasks.length} tâches · cliquez pour commenter
-      </div>
-
+      {/* Expanded */}
       {isOpen && (
-        <div onClick={e => e.stopPropagation()} style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
-          {comments.length > 0 && (
-            <div className="flex flex-col gap-2 mb-3" style={{ maxHeight: 200, overflowY: 'auto' }}>
-              {comments.map(c => <CommentBubble key={c.id} comment={c} />)}
+        <div onClick={e => e.stopPropagation()}
+          style={{ borderTop: '1px solid var(--border)', padding: '16px 18px',
+            background: 'var(--bg)', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+          <div>
+            <ELabel>Prochaine étape</ELabel>
+            <div style={{ fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text)',
+              background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6, padding: '8px 12px', marginBottom: 14 }}>
+              → {project.nextStep}
             </div>
-          )}
-          <CommentInput projectId={project.id} author={author} setAuthor={setAuthor}
-            text={commentText} setText={setCommentText} onSend={onSend} sending={sending} />
+            <ELabel>Tâches · {doneTasks}/{project.tasks.length} complétées</ELabel>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {project.tasks.map(t => (
+                <div key={t.id} style={{ display: 'flex', gap: 8, fontSize: '0.77rem', alignItems: 'flex-start' }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 3, flexShrink: 0, marginTop: 2,
+                    background: t.done ? '#0F8B5A' : 'transparent',
+                    border: t.done ? 'none' : '1.5px solid var(--border2)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.52rem', color: '#fff', fontWeight: 700 }}>
+                    {t.done && '✓'}
+                  </div>
+                  <span style={{ color: t.done ? 'var(--muted)' : 'var(--text)',
+                    textDecoration: t.done ? 'line-through' : 'none', lineHeight: 1.4 }}>{t.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <ELabel>Échanges sur ce projet</ELabel>
+            <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 10 }}>
+              {comments.length === 0
+                ? <span style={{ fontSize: '0.73rem', color: 'var(--muted)', fontStyle: 'italic' }}>Aucun échange pour l'instant.</span>
+                : comments.map(c => <Bubble key={c.id} comment={c} />)}
+            </div>
+            <div style={{ display: 'flex', gap: 5, marginBottom: 7 }}>
+              {(['manager', 'valentin'] as const).map(a => (
+                <button key={a} onClick={() => setAuthor(a)}
+                  style={{ fontFamily: 'var(--font-body)', fontSize: '0.7rem', fontWeight: 500, padding: '4px 10px', borderRadius: 5, cursor: 'pointer', border: '1px solid',
+                    background: author === a ? (a === 'manager' ? 'var(--accent-light)' : 'var(--green-light)') : 'var(--white)',
+                    borderColor: author === a ? (a === 'manager' ? '#A0B8FF' : '#6EE7B7') : 'var(--border)',
+                    color: author === a ? (a === 'manager' ? 'var(--accent)' : 'var(--green)') : 'var(--muted)' }}>
+                  {a === 'manager' ? '👔 Manager' : '💻 Valentin'}
+                </button>
+              ))}
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <input value={commentText} onChange={e => setCommentText(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && onSend()}
+                placeholder="Votre message… (Entrée)"
+                style={{ flex: 1, fontFamily: 'var(--font-body)', fontSize: '0.76rem',
+                  background: 'var(--white)', border: '1px solid var(--border2)',
+                  borderRadius: 6, padding: '6px 10px', color: 'var(--text)', outline: 'none' }} />
+              <button onClick={onSend} disabled={sending || !commentText.trim()}
+                style={{ fontFamily: 'var(--font-body)', fontSize: '0.73rem', fontWeight: 600,
+                  background: 'var(--accent)', border: 'none', borderRadius: 6, padding: '6px 12px',
+                  color: '#fff', cursor: 'pointer', opacity: (sending || !commentText.trim()) ? 0.4 : 1 }}>
+                {sending ? '…' : 'Envoyer'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 }
 
-function CommentBubble({ comment }: { comment: Comment }) {
-  const isManager = comment.author === 'manager';
+function Bubble({ comment }: { comment: Comment }) {
+  const isM = comment.author === 'manager';
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isManager ? 'flex-start' : 'flex-end' }}>
-      <div style={{ maxWidth: '85%', padding: '7px 11px', borderRadius: 8,
-        background: isManager ? 'rgba(79,142,247,0.12)' : 'rgba(79,201,135,0.10)',
-        border: `1px solid ${isManager ? 'rgba(79,142,247,0.25)' : 'rgba(79,201,135,0.25)'}`,
-        color: 'var(--text)', fontSize: '0.78rem', lineHeight: 1.4 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: isM ? 'flex-start' : 'flex-end' }}>
+      <div style={{ maxWidth: '90%', padding: '6px 10px', borderRadius: 7, fontSize: '0.76rem', lineHeight: 1.4,
+        background: isM ? 'var(--accent-light)' : 'var(--green-light)',
+        border: `1px solid ${isM ? '#C7D7FF' : '#A7F3D0'}`, color: 'var(--text)' }}>
         {comment.text}
       </div>
-      <div className="mono mt-1" style={{ fontSize: '0.58rem', color: 'var(--muted)' }}>
-        {isManager ? '👔 Manager' : '💻 Valentin'} · {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' })}
-      </div>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.56rem', color: 'var(--muted)', marginTop: 2 }}>
+        {isM ? '👔' : '💻'} {new Date(comment.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+      </span>
     </div>
   );
 }
 
-function CommentInput({ projectId, author, setAuthor, text, setText, onSend, sending }:
-  { projectId: string; author: 'manager'|'valentin'; setAuthor: (v:'manager'|'valentin')=>void;
-    text: string; setText: (v:string)=>void; onSend: ()=>void; sending: boolean }) {
-  return (
-    <div onClick={e => e.stopPropagation()}>
-      <div className="flex gap-2 mb-2">
-        {(['manager','valentin'] as const).map(a => (
-          <button key={a} onClick={() => setAuthor(a)}
-            style={{ fontFamily: 'inherit', fontSize: '0.7rem', padding: '3px 10px', borderRadius: 3, cursor: 'pointer',
-              background: author === a ? (a==='manager'?'rgba(79,142,247,0.2)':'rgba(79,201,135,0.2)') : 'var(--surface2)',
-              border: `1px solid ${author === a ? (a==='manager'?'#4f8ef7':'#4fc987') : 'var(--border)'}`,
-              color: author === a ? (a==='manager'?'#4f8ef7':'#4fc987') : 'var(--muted)' }}>
-            {a === 'manager' ? '👔 Manager' : '💻 Valentin'}
-          </button>
-        ))}
-      </div>
-      <div className="flex gap-2">
-        <input value={text} onChange={e => setText(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && !e.shiftKey && onSend()}
-          placeholder="Votre message... (Entrée pour envoyer)"
-          style={{ flex: 1, background: 'var(--surface2)', border: '1px solid var(--border)', borderRadius: 4,
-            padding: '6px 10px', color: 'var(--text)', fontSize: '0.78rem', fontFamily: 'inherit', outline: 'none' }} />
-        <button onClick={onSend} disabled={sending || !text.trim()}
-          style={{ background: '#4f8ef7', border: 'none', borderRadius: 4, padding: '6px 14px', cursor: 'pointer',
-            color: '#fff', fontSize: '0.78rem', fontFamily: 'inherit', fontWeight: 600, opacity: sending || !text.trim() ? 0.5 : 1 }}>
-          {sending ? '...' : 'Envoyer'}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SectionTitle({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mono flex items-center gap-2 mb-3"
-      style={{ fontSize: '0.63rem', letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--muted)' }}>
-      {children}
-      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
-    </div>
-  );
-}
-
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: 18 }}>
-      <SectionTitle>{title}</SectionTitle>
-      {children}
-    </div>
-  );
+function ELabel({ children }: { children: React.ReactNode }) {
+  return <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.59rem', textTransform: 'uppercase',
+    letterSpacing: '0.08em', color: 'var(--muted)', marginBottom: 7 }}>{children}</div>;
 }

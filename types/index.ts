@@ -1,4 +1,3 @@
-export type Priority = 'high' | 'med' | 'low';
 export type Status = 'en-cours' | 'a-deployer' | 'ok' | 'bloque' | 'a-cadrer';
 
 export interface Task {
@@ -10,9 +9,11 @@ export interface Task {
 export interface Project {
   id: string;
   name: string;
-  priority: Priority;
+  priority: number;
   status: Status;
   progress: number;
+  currentAction: string;
+  nextStep: string;
   tasks: Task[];
   notes?: string;
 }

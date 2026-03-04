@@ -1,10 +1,10 @@
 import { Redis } from '@upstash/redis';
+import { DashboardData, Comment } from '@/types';
 
 const kv = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
-import { DashboardData, Comment } from '@/types';
 
 const DATA_KEY = 'dashboard:data';
 const COMMENTS_KEY = 'dashboard:comments';
@@ -24,79 +24,101 @@ export const defaultData: DashboardData = {
   ],
   projects: [
     {
-      id: 'chorus', name: 'Interface CHORUS', priority: 'high', status: 'en-cours', progress: 45,
+      id: 'chorus', name: 'Interface CHORUS', priority: 1, status: 'en-cours', progress: 45,
+      currentAction: 'Décommissionnement JPA/Hibernate en procédure stockée',
+      nextStep: 'Valider les tests en environnement THCR',
       tasks: [
-        { id: 'c1', label: 'Décom JPA / Hibernate → PS', done: false },
-        { id: 'c2', label: 'Tests version chorus', done: true },
+        { id: 'c1', label: 'Décom JPA / Hibernate → Procédures stockées', done: false },
+        { id: 'c2', label: 'Générer version de test', done: true },
       ]
     },
     {
-      id: 'facturx', name: 'Interface FacturX', priority: 'high', status: 'a-deployer', progress: 65,
+      id: 'facturx', name: 'Interface FacturX', priority: 2, status: 'a-deployer', progress: 75,
+      currentAction: 'Préparer le déploiement Terrena avec les nouvelles fonctionnalités',
+      nextStep: 'Installer la version FacturX avec nouveautés chez Terrena',
       tasks: [
         { id: 'f1', label: 'Finaliser TX2', done: true },
-        { id: 'f2', label: 'API Sage brouillon', done: true },
-        { id: 'f3', label: 'Préparer Factur-X Terrena', done: false },
+        { id: 'f2', label: 'API Sage — brouillon envoyé', done: true },
+        { id: 'f3', label: 'Préparer version Factur-X Terrena', done: false },
         { id: 'f4', label: 'Installer nouveautés Terrena', done: false },
       ]
     },
     {
-      id: 'graph', name: 'SYNC Graph (API Microsoft)', priority: 'high', status: 'en-cours', progress: 55,
+      id: 'graph', name: 'SYNC Graph — API Microsoft', priority: 3, status: 'en-cours', progress: 50,
+      currentAction: 'Décommissionnement des tables temporaires',
+      nextStep: 'Attente retour de test THCR · Relancer ticket PXO',
       tasks: [
         { id: 'g1', label: 'Analyse API Sage envoyée', done: true },
-        { id: 'g2', label: 'Brouillon GRAPH premier jet', done: true },
-        { id: 'g3', label: 'Retour test THCR en attente', done: false },
-        { id: 'g4', label: 'Relancer ticket PXO', done: false },
+        { id: 'g2', label: 'Brouillon GRAPH — premier jet', done: true },
+        { id: 'g3', label: 'Retour de test THCR', done: false },
+        { id: 'g4', label: 'Relancer suivi ticket PXO', done: false },
       ]
     },
     {
-      id: 'athmobile', name: 'ATH Mobile', priority: 'med', status: 'en-cours', progress: 40,
+      id: 'ndf', name: 'Appli NDF', priority: 4, status: 'ok', progress: 70,
+      currentAction: 'Développement du module analytique',
+      nextStep: 'Intégrer ajout analytique + suppression de frais',
       tasks: [
-        { id: 'a1', label: 'Devs en cours', done: false },
-        { id: 'a2', label: 'Démo à préparer', done: false },
+        { id: 'n1', label: 'Démo sur NA-ATHERP', done: true },
+        { id: 'n2', label: 'Ajout analytique', done: false },
+        { id: 'n3', label: 'Suppression d\'un frais dans NDF', done: false },
       ]
     },
     {
-      id: 'ndf', name: 'Appli NDF', priority: 'med', status: 'ok', progress: 70,
+      id: 'scanit', name: 'SCAN-IT', priority: 5, status: 'en-cours', progress: 80,
+      currentAction: 'Finalisation des modifications récentes',
+      nextStep: 'Démo des modifs — validation fonctionnelle',
       tasks: [
-        { id: 'n1', label: 'Démo sur NA-ATHERP OK', done: true },
-        { id: 'n2', label: 'Ajout analytique à caler', done: false },
-        { id: 'n3', label: 'Suppression frais NDF', done: false },
-      ]
-    },
-    {
-      id: 'scanit', name: 'SCAN-IT', priority: 'med', status: 'en-cours', progress: 80,
-      tasks: [
-        { id: 's1', label: 'Finalisation (fonctionnel)', done: false },
+        { id: 's1', label: 'Finalisation fonctionnelle', done: false },
         { id: 's2', label: 'Démo modifs récentes', done: false },
       ]
     },
     {
-      id: 'outlook', name: 'Add-in Outlook', priority: 'med', status: 'en-cours', progress: 50,
+      id: 'outlook', name: 'Add-in Outlook', priority: 6, status: 'en-cours', progress: 50,
+      currentAction: 'Développement en cours — brouillon mail via API GRAPH',
+      nextStep: 'Créer brouillon de mail depuis l\'API GRAPH (TODO YN)',
       tasks: [
-        { id: 'o1', label: 'Devs en cours avancés', done: true },
-        { id: 'o2', label: 'Démo à préparer', done: false },
+        { id: 'o1', label: 'Développement Add-in', done: true },
+        { id: 'o2', label: 'Créer brouillon depuis API GRAPH', done: false },
+        { id: 'o3', label: 'Démo à préparer', done: false },
       ]
     },
     {
-      id: 'smarttech', name: 'SMART TECH V2', priority: 'med', status: 'en-cours', progress: 30,
+      id: 'athmobile', name: 'ATH Mobile', priority: 7, status: 'en-cours', progress: 40,
+      currentAction: 'Développements en cours',
+      nextStep: 'Préparer démo du développement en cours',
       tasks: [
-        { id: 'st1', label: 'Migration PWA classique', done: false },
+        { id: 'a1', label: 'Développements feature en cours', done: false },
+        { id: 'a2', label: 'Démo à préparer', done: false },
+      ]
+    },
+    {
+      id: 'smarttech', name: 'SMART TECH V2', priority: 8, status: 'en-cours', progress: 30,
+      currentAction: 'Refonte en application PWA classique',
+      nextStep: 'Avancer API V2 + migration PWA',
+      tasks: [
+        { id: 'st1', label: 'Migration vers PWA classique', done: false },
         { id: 'st2', label: 'Avancer API V2', done: false },
       ]
     },
     {
-      id: 'audit', name: "Outil d'Audit", priority: 'low', status: 'bloque', progress: 20,
+      id: 'audit', name: 'Outil d\'Audit', priority: 9, status: 'bloque', progress: 20,
+      currentAction: 'En attente d\'arbitrage sur la suite',
+      nextStep: 'Décider : CRON auto + réconciliation + paramétrage dynamique ?',
       tasks: [
-        { id: 'au1', label: "Point d'avancement (YN)", done: false },
-        { id: 'au2', label: 'CRON + réconciliation auto', done: false },
-        { id: 'au3', label: 'Paramétrage dynamique', done: false },
+        { id: 'au1', label: 'Point d\'avancement (à faire en réunion YN)', done: false },
+        { id: 'au2', label: 'CRON pour lancer Audit automatiquement', done: false },
+        { id: 'au3', label: 'Réconciliation automatique', done: false },
+        { id: 'au4', label: 'Paramétrage dynamique des champs', done: false },
       ]
     },
     {
-      id: 'rdv', name: 'RDV V2 / Bookings', priority: 'low', status: 'a-cadrer', progress: 10,
+      id: 'rdv', name: 'RDV V2 / Bookings', priority: 10, status: 'a-cadrer', progress: 10,
+      currentAction: 'Scope non défini',
+      nextStep: 'Cadrer le périmètre fonctionnel avec YN',
       tasks: [
-        { id: 'r1', label: 'Avancer sur le sujet', done: false },
-        { id: 'r2', label: 'Scope à définir', done: false },
+        { id: 'r1', label: 'Cadrage du scope à faire', done: false },
+        { id: 'r2', label: 'Démarrage développement', done: false },
       ]
     },
   ]
