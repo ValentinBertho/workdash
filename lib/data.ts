@@ -1,16 +1,28 @@
-import { Redis } from '@upstash/redis';
+import fs from 'fs';
+import path from 'path';
 import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint } from '@/types';
 
-const kv = new Redis({
-  url: process.env.UPSTASH_REDIS_REST_URL!,
-  token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-});
+// File-based persistent storage — survives restarts, no external service needed
+const DATA_DIR = path.join(process.cwd(), '.data');
 
-const DATA_KEY          = 'dashboard:data';
-const COMMENTS_KEY      = 'dashboard:comments';
-const CHANGELOG_KEY     = 'dashboard:changelog';
-const MANAGER_TASKS_KEY = 'dashboard:manager-tasks';
-const DECISIONS_KEY     = 'dashboard:decisions';
+function ensureDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function readFile<T>(filename: string, fallback: T): T {
+  ensureDir();
+  const file = path.join(DATA_DIR, filename);
+  try {
+    if (!fs.existsSync(file)) return fallback;
+    return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
+  } catch { return fallback; }
+}
+
+function writeFile(filename: string, data: unknown): void {
+  ensureDir();
+  const file = path.join(DATA_DIR, filename);
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+}
 
 const DEFAULT_DECISIONS: DecisionPoint[] = [
   { id: 'dp1', text: "Brouillon mail via API GRAPH — confirmer l'implémentation ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
@@ -135,92 +147,76 @@ export const defaultData: DashboardData = {
 };
 
 export async function getData(): Promise<DashboardData> {
-  try {
-    const data = await kv.get<DashboardData>(DATA_KEY);
-    return data ?? defaultData;
-  } catch { return defaultData; }
+  return readFile<DashboardData>('dashboard.json', defaultData);
 }
 
 export async function saveData(data: DashboardData): Promise<void> {
-  await kv.set(DATA_KEY, { ...data, updatedAt: new Date().toISOString() });
+  writeFile('dashboard.json', { ...data, updatedAt: new Date().toISOString() });
 }
 
 /* ─── Comments ───────────────────────────────────────────────── */
 export async function getComments(): Promise<Comment[]> {
-  try {
-    const comments = await kv.get<Comment[]>(COMMENTS_KEY);
-    return comments ?? [];
-  } catch { return []; }
+  return readFile<Comment[]>('comments.json', []);
 }
 
 export async function saveComment(comment: Comment): Promise<void> {
   const existing = await getComments();
-  await kv.set(COMMENTS_KEY, [...existing, comment]);
+  writeFile('comments.json', [...existing, comment]);
 }
 
 export async function deleteComment(id: string): Promise<void> {
   const existing = await getComments();
-  await kv.set(COMMENTS_KEY, existing.filter(c => c.id !== id));
+  writeFile('comments.json', existing.filter(c => c.id !== id));
 }
 
 /* ─── Changelog ──────────────────────────────────────────────── */
 export async function getChangelog(): Promise<ChangelogEntry[]> {
-  try {
-    const entries = await kv.get<ChangelogEntry[]>(CHANGELOG_KEY);
-    return entries ?? [];
-  } catch { return []; }
+  return readFile<ChangelogEntry[]>('changelog.json', []);
 }
 
 export async function addChangelogEntries(entries: ChangelogEntry[]): Promise<void> {
   if (entries.length === 0) return;
   const existing = await getChangelog();
   const merged = [...existing, ...entries];
-  // Keep last 500 entries
-  await kv.set(CHANGELOG_KEY, merged.slice(-500));
+  writeFile('changelog.json', merged.slice(-500));
 }
 
 /* ─── Manager tasks ──────────────────────────────────────────── */
 export async function getManagerTasks(): Promise<ManagerTask[]> {
-  try {
-    const tasks = await kv.get<ManagerTask[]>(MANAGER_TASKS_KEY);
-    return tasks ?? [];
-  } catch { return []; }
+  return readFile<ManagerTask[]>('manager-tasks.json', []);
 }
 
 export async function saveManagerTask(task: ManagerTask): Promise<void> {
   const existing = await getManagerTasks();
-  await kv.set(MANAGER_TASKS_KEY, [...existing, task]);
+  writeFile('manager-tasks.json', [...existing, task]);
 }
 
 export async function updateManagerTask(id: string, updates: Partial<ManagerTask>): Promise<void> {
   const existing = await getManagerTasks();
-  await kv.set(MANAGER_TASKS_KEY, existing.map(t => t.id === id ? { ...t, ...updates } : t));
+  writeFile('manager-tasks.json', existing.map(t => t.id === id ? { ...t, ...updates } : t));
 }
 
 export async function deleteManagerTask(id: string): Promise<void> {
   const existing = await getManagerTasks();
-  await kv.set(MANAGER_TASKS_KEY, existing.filter(t => t.id !== id));
+  writeFile('manager-tasks.json', existing.filter(t => t.id !== id));
 }
 
 /* ─── Decision points ────────────────────────────────────── */
 export async function getDecisions(): Promise<DecisionPoint[]> {
-  try {
-    const d = await kv.get<DecisionPoint[]>(DECISIONS_KEY);
-    return d ?? DEFAULT_DECISIONS;
-  } catch { return DEFAULT_DECISIONS; }
+  return readFile<DecisionPoint[]>('decisions.json', DEFAULT_DECISIONS);
 }
 
 export async function saveDecision(decision: DecisionPoint): Promise<void> {
   const existing = await getDecisions();
-  await kv.set(DECISIONS_KEY, [...existing, decision]);
+  writeFile('decisions.json', [...existing, decision]);
 }
 
 export async function updateDecision(id: string, updates: Partial<DecisionPoint>): Promise<void> {
   const existing = await getDecisions();
-  await kv.set(DECISIONS_KEY, existing.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d));
+  writeFile('decisions.json', existing.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d));
 }
 
 export async function deleteDecision(id: string): Promise<void> {
   const existing = await getDecisions();
-  await kv.set(DECISIONS_KEY, existing.filter(d => d.id !== id));
+  writeFile('decisions.json', existing.filter(d => d.id !== id));
 }
