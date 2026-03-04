@@ -3,598 +3,349 @@ import { useEffect, useState, useCallback } from 'react';
 import { DashboardData, Project, Task, Comment, Status } from '@/types';
 
 const STATUS_OPTIONS: Status[] = ['en-cours', 'a-deployer', 'ok', 'bloque', 'a-cadrer'];
-const STATUS_META: Record<Status, { label: string; icon: string; color: string; bg: string }> = {
-  'en-cours':   { label: 'En cours',   icon: '⚡', color: '#7C3AED', bg: '#EDE9FE' },
-  'a-deployer': { label: 'À déployer', icon: '🚀', color: '#EA580C', bg: '#FFEDD5' },
-  'ok':         { label: 'Terminé',    icon: '✅', color: '#059669', bg: '#D1FAE5' },
-  'bloque':     { label: 'Bloqué',     icon: '🔴', color: '#DC2626', bg: '#FEE2E2' },
-  'a-cadrer':   { label: 'À cadrer',   icon: '📋', color: '#64748B', bg: '#F1F5F9' },
+const STATUS_META: Record<Status, { label: string; color: string; bg: string; border: string }> = {
+  'en-cours':   { label: 'En cours',   color: '#4F46E5', bg: '#EEEDFD', border: '#C4C2F7' },
+  'a-deployer': { label: 'À déployer', color: '#B45309', bg: '#FEF3E2', border: '#F6C27A' },
+  'ok':         { label: 'Terminé',    color: '#15803D', bg: '#ECFDF5', border: '#86EFAC' },
+  'bloque':     { label: 'Bloqué',     color: '#DC2626', bg: '#FEF2F2', border: '#FCA5A5' },
+  'a-cadrer':   { label: 'À cadrer',   color: '#78716C', bg: '#F5F0EA', border: '#D6CFC7' },
 };
 
-const EMPTY_PROJECT = {
-  name: '', status: 'en-cours' as Status, currentAction: '', nextStep: '', progress: 0, dueDate: undefined as string | undefined,
+const EMPTY: { name: string; status: Status; currentAction: string; nextStep: string; progress: number; dueDate: string | undefined } = {
+  name: '', status: 'en-cours', currentAction: '', nextStep: '', progress: 0, dueDate: undefined,
 };
 
 export default function AdminPage() {
   const [authed, setAuthed]     = useState(false);
   const [password, setPassword] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [data, setData]         = useState<DashboardData | null>(null);
+  const [loginErr, setLoginErr] = useState('');
+  const [data, setData]         = useState<DashboardData|null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
   const [saving, setSaving]     = useState(false);
-  const [saveMsg, setSaveMsg]   = useState('');
-  const [tab, setTab]           = useState<'projects' | 'todos' | 'comments'>('projects');
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [newTaskLabel, setNewTaskLabel] = useState('');
-  const [newTodoLabel, setNewTodoLabel] = useState('');
-  const [showAddProject, setShowAddProject] = useState(false);
-  const [newProject, setNewProject] = useState({ ...EMPTY_PROJECT });
+  const [saved, setSaved]       = useState(false);
+  const [unsaved, setUnsaved]   = useState(false);
+  const [tab, setTab]           = useState<'projects'|'todos'|'comments'>('projects');
+  const [expandedId, setExpandedId] = useState<string|null>(null);
+  const [newTask, setNewTask]   = useState('');
+  const [newTodo, setNewTodo]   = useState('');
+  const [showAdd, setShowAdd]   = useState(false);
+  const [form, setForm]         = useState({...EMPTY});
 
   const load = useCallback(async () => {
     const [d, c] = await Promise.all([
-      fetch('/api/projects').then(r => r.json()),
-      fetch('/api/comments').then(r => r.json()),
+      fetch('/api/projects').then(r=>r.json()),
+      fetch('/api/comments').then(r=>r.json()),
     ]);
-    setData(d); setComments(c);
+    setData(d); setComments(c); setUnsaved(false);
   }, []);
 
   const login = async () => {
-    setLoginError('');
-    const res = await fetch('/api/auth', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    });
-    if (res.ok) { setAuthed(true); load(); }
-    else setLoginError('Mot de passe incorrect');
+    setLoginErr('');
+    const r = await fetch('/api/auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password})});
+    if (r.ok) { setAuthed(true); load(); } else setLoginErr('Mot de passe incorrect');
   };
-
-  const logout = async () => {
-    await fetch('/api/auth', { method: 'DELETE' });
-    setAuthed(false); setData(null);
-  };
+  const logout = async () => { await fetch('/api/auth',{method:'DELETE'}); setAuthed(false); setData(null); };
 
   const save = async () => {
-    if (!data) return;
-    setSaving(true);
-    await fetch('/api/projects', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    setSaving(false); setSaveMsg('Sauvegardé ✓');
-    setTimeout(() => setSaveMsg(''), 2500);
+    if (!data) return; setSaving(true);
+    await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    setSaving(false); setSaved(true); setUnsaved(false);
+    setTimeout(()=>setSaved(false), 2500);
   };
 
   const upProject = (id: string, updates: Partial<Project>) => {
     if (!data) return;
-    setData({ ...data, projects: data.projects.map(p => p.id === id ? { ...p, ...updates } : p) });
+    setData({...data, projects: data.projects.map(p=>p.id===id?{...p,...updates}:p)});
+    setUnsaved(true);
   };
 
-  const toggleTask = (projectId: string, taskId: string) => {
+  const toggleTask = (pid: string, tid: string) => {
     if (!data) return;
-    setData({ ...data, projects: data.projects.map(p => p.id !== projectId ? p : {
-      ...p, tasks: p.tasks.map(t => t.id === taskId ? { ...t, done: !t.done } : t),
-    })});
+    setData({...data, projects: data.projects.map(p=>p.id!==pid?p:{...p,tasks:p.tasks.map(t=>t.id===tid?{...t,done:!t.done}:t)})});
+    setUnsaved(true);
   };
 
-  const addTask = (projectId: string) => {
-    if (!newTaskLabel.trim() || !data) return;
-    const task: Task = { id: crypto.randomUUID(), label: newTaskLabel.trim(), done: false };
-    setData({ ...data, projects: data.projects.map(p => p.id !== projectId ? p : { ...p, tasks: [...p.tasks, task] }) });
-    setNewTaskLabel('');
+  const addTask = (pid: string) => {
+    if (!newTask.trim()||!data) return;
+    const task: Task = {id: crypto.randomUUID(), label: newTask.trim(), done: false};
+    setData({...data, projects: data.projects.map(p=>p.id!==pid?p:{...p,tasks:[...p.tasks,task]})});
+    setNewTask(''); setUnsaved(true);
   };
 
-  const removeTask = (projectId: string, taskId: string) => {
+  const removeTask = (pid: string, tid: string) => {
     if (!data) return;
-    setData({ ...data, projects: data.projects.map(p => p.id !== projectId ? p : {
-      ...p, tasks: p.tasks.filter(t => t.id !== taskId),
-    })});
+    setData({...data, projects: data.projects.map(p=>p.id!==pid?p:{...p,tasks:p.tasks.filter(t=>t.id!==tid)})});
+    setUnsaved(true);
   };
 
-  const moveProject = (id: string, dir: -1 | 1) => {
+  const moveProject = (id: string, dir: -1|1) => {
     if (!data) return;
-    const sorted = [...data.projects].sort((a, b) => a.priority - b.priority);
-    const idx = sorted.findIndex(p => p.id === id);
-    if (idx + dir < 0 || idx + dir >= sorted.length) return;
-    const a = sorted[idx], b = sorted[idx + dir];
-    setData({ ...data, projects: data.projects.map(p =>
-      p.id === a.id ? { ...p, priority: b.priority } :
-      p.id === b.id ? { ...p, priority: a.priority } : p
-    )});
+    const s = [...data.projects].sort((a,b)=>a.priority-b.priority);
+    const idx = s.findIndex(p=>p.id===id);
+    if (idx+dir<0||idx+dir>=s.length) return;
+    const [a,b] = [s[idx],s[idx+dir]];
+    setData({...data, projects: data.projects.map(p=>p.id===a.id?{...p,priority:b.priority}:p.id===b.id?{...p,priority:a.priority}:p)});
+    setUnsaved(true);
   };
 
   const deleteProject = (id: string) => {
-    if (!data || !confirm('Supprimer ce projet ?')) return;
-    setData({ ...data, projects: data.projects.filter(p => p.id !== id) });
+    if (!data||!confirm('Supprimer ce projet ?')) return;
+    setData({...data, projects: data.projects.filter(p=>p.id!==id)});
+    setUnsaved(true);
   };
 
   const addProject = () => {
-    if (!newProject.name.trim() || !data) return;
-    const maxPriority = data.projects.length > 0
-      ? Math.max(...data.projects.map(p => p.priority))
-      : 0;
-    const project: Project = {
-      id: crypto.randomUUID(),
-      name: newProject.name.trim(),
-      priority: maxPriority + 1,
-      status: newProject.status,
-      progress: newProject.progress,
-      currentAction: newProject.currentAction.trim() || 'Démarrage du projet',
-      nextStep: newProject.nextStep.trim() || 'À définir',
-      tasks: [],
-      dueDate: newProject.dueDate || undefined,
+    if (!form.name.trim()||!data) return;
+    const max = data.projects.length>0 ? Math.max(...data.projects.map(p=>p.priority)) : 0;
+    const p: Project = {
+      id: crypto.randomUUID(), name: form.name.trim(), priority: max+1, status: form.status,
+      progress: form.progress, currentAction: form.currentAction.trim()||'Démarrage du projet',
+      nextStep: form.nextStep.trim()||'À définir', tasks: [], dueDate: form.dueDate||undefined,
     };
-    setData({ ...data, projects: [...data.projects, project] });
-    setNewProject({ ...EMPTY_PROJECT });
-    setShowAddProject(false);
+    setData({...data, projects:[...data.projects,p]});
+    setForm({...EMPTY}); setShowAdd(false); setUnsaved(true);
   };
 
   const toggleTodo = (id: string) => {
     if (!data) return;
-    setData({ ...data, weeklyTodos: data.weeklyTodos.map(t => t.id === id ? { ...t, done: !t.done } : t) });
+    setData({...data, weeklyTodos: data.weeklyTodos.map(t=>t.id===id?{...t,done:!t.done}:t)});
+    setUnsaved(true);
   };
 
   const addTodo = () => {
-    if (!data || !newTodoLabel.trim()) return;
-    setData({ ...data, weeklyTodos: [...data.weeklyTodos, { id: crypto.randomUUID(), label: newTodoLabel.trim(), done: false }] });
-    setNewTodoLabel('');
+    if (!data||!newTodo.trim()) return;
+    setData({...data, weeklyTodos:[...data.weeklyTodos,{id:crypto.randomUUID(),label:newTodo.trim(),done:false}]});
+    setNewTodo(''); setUnsaved(true);
   };
 
   const removeTodo = (id: string) => {
     if (!data) return;
-    setData({ ...data, weeklyTodos: data.weeklyTodos.filter(t => t.id !== id) });
+    setData({...data, weeklyTodos: data.weeklyTodos.filter(t=>t.id!==id)});
+    setUnsaved(true);
   };
 
   const deleteComment = async (id: string) => {
-    await fetch('/api/comments', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
-    setComments(c => c.filter(x => x.id !== id));
+    await fetch('/api/comments',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id})});
+    setComments(c=>c.filter(x=>x.id!==id));
   };
 
-  /* ── Login screen ──────────────────────────────────────── */
+  /* ── Login ── */
   if (!authed) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'linear-gradient(135deg, #F0EEFF 0%, #EDE9FE 100%)' }}>
-      <div style={{
-        background: 'white', border: '2.5px solid #1E1B4B', borderRadius: 20,
-        padding: '44px 40px', width: 360, textAlign: 'center',
-        boxShadow: '6px 6px 0 #1E1B4B',
-      }}>
-        <div style={{ fontSize: '3rem', marginBottom: 12 }}>🔐</div>
-        <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.7rem', fontWeight: 900,
-          color: '#1E1B4B', letterSpacing: '-0.02em', marginBottom: 4 }}>
-          Console Admin
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--header)'}}>
+      <div style={{background:'#251E19',border:'1px solid #3D3128',borderRadius:14,padding:'48px 44px',width:400,textAlign:'center',boxShadow:'0 32px 64px rgba(0,0,0,0.4)'}}>
+        <div style={{width:48,height:48,background:'var(--accent-light)',border:'1px solid var(--accent-border)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px'}}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
         </div>
-        <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.65rem', color: '#9CA3AF',
-          textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 28 }}>
-          WorkDash · MISMO
-        </div>
-        <input
-          type="password" value={password}
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && login()}
-          placeholder="Mot de passe"
-          style={{
-            width: '100%', fontFamily: 'var(--font-body)', fontSize: '0.95rem',
-            background: '#F9F9FF', border: `2.5px solid ${loginError ? '#DC2626' : '#C4B5FD'}`,
-            borderRadius: 12, padding: '11px 16px', color: '#1E1B4B', outline: 'none',
-            marginBottom: 12, boxShadow: loginError ? '2px 2px 0 #DC2626' : '2px 2px 0 #C4B5FD',
-          }}
-        />
-        {loginError && (
-          <div style={{ color: '#DC2626', fontSize: '0.78rem', marginBottom: 12, fontWeight: 600 }}>
-            ❌ {loginError}
-          </div>
-        )}
-        <button onClick={login} style={{
-          width: '100%', fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.95rem',
-          background: '#7C3AED', border: '2.5px solid #5B21B6', borderRadius: 12,
-          padding: '11px', color: 'white', cursor: 'pointer',
-          boxShadow: '3px 3px 0 #5B21B6',
-        }}>
-          ⚡ Connexion
+        <p style={{fontWeight:700,fontSize:'1.3rem',color:'#F5EDE0',letterSpacing:'-0.02em',marginBottom:5}}>Console Admin</p>
+        <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#4A3A2E',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:32}}>WorkDash · Valentin</p>
+        <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} placeholder="Mot de passe"
+          style={{width:'100%',fontSize:'0.87rem',background:'rgba(255,255,255,0.05)',border:`1px solid ${loginErr?'#DC2626':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'11px 14px',color:'#F5EDE0',outline:'none',marginBottom:10,caretColor:'var(--accent)'}} />
+        {loginErr&&<p style={{color:'#F87171',fontSize:'0.76rem',marginBottom:12,fontWeight:500}}>{loginErr}</p>}
+        <button onClick={login} style={{width:'100%',fontWeight:600,fontSize:'0.87rem',background:'var(--accent)',border:'none',borderRadius:8,padding:'12px',color:'white',cursor:'pointer'}}
+          onMouseOver={e=>(e.currentTarget.style.background='var(--accent-dark)')} onMouseOut={e=>(e.currentTarget.style.background='var(--accent)')}>
+          Accéder à la console
         </button>
       </div>
     </div>
   );
 
   if (!data) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)' }}>
-      <div style={{ fontFamily: 'var(--font-display)', fontWeight: 900, color: 'var(--purple)', fontSize: '1rem' }}>
-        Chargement…
-      </div>
+    <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--bg)'}}>
+      <p style={{color:'var(--text-3)',fontFamily:'var(--font-mono)',fontSize:'0.78rem'}}>chargement…</p>
     </div>
   );
 
-  const sorted = [...data.projects].sort((a, b) => a.priority - b.priority);
+  const sorted = [...data.projects].sort((a,b)=>a.priority-b.priority);
 
-  /* ── Admin UI ──────────────────────────────────────────── */
+  /* ── Admin UI ── */
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{minHeight:'100vh',background:'var(--bg)'}}>
 
       {/* Header */}
-      <header style={{
-        background: 'linear-gradient(135deg, #1E1B4B 0%, #312E81 100%)',
-        borderBottom: '3px solid #1E1B4B', boxShadow: '0 4px 0 #0F0E2B',
-      }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 32px',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 72 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 40, height: 40, background: '#7C3AED', borderRadius: 12,
-              border: '2px solid rgba(255,255,255,0.3)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>
-              ⚙️
-            </div>
-            <div>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.25rem', fontWeight: 900, color: 'white' }}>
-                Console Admin
-              </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'rgba(255,255,255,0.5)' }}>
-                WorkDash
+      <header style={{background:'var(--header)',borderBottom:'1px solid var(--header-border)',position:'sticky',top:0,zIndex:50}}>
+        <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'var(--accent)'}} />
+        <div style={{maxWidth:1280,margin:'0 auto',padding:'0 32px',display:'flex',alignItems:'center',justifyContent:'space-between',height:60}}>
+          <div style={{display:'flex',alignItems:'center',gap:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <div style={{width:7,height:28,background:'var(--accent)',borderRadius:2}} />
+              <div>
+                <p style={{fontWeight:800,fontSize:'0.88rem',color:'#F5EDE0',letterSpacing:'-0.02em',lineHeight:1.15}}>Console Admin</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:'0.54rem',color:'#4A3A2E',letterSpacing:'0.08em'}}>WorkDash · MISMO</p>
               </div>
             </div>
+            <span style={{width:1,height:18,background:'#2D2420'}} />
+            {unsaved&&<span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#B45309',letterSpacing:'0.04em'}}>● Modifications non sauvegardées</span>}
+            {saved&&<span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#15803D',letterSpacing:'0.04em'}}>✓ Sauvegardé</span>}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {saveMsg && (
-              <span style={{ fontFamily: 'var(--font-display)', color: '#34D399', fontSize: '0.82rem', fontWeight: 900 }}>
-                {saveMsg}
-              </span>
-            )}
-            <button onClick={save} disabled={saving} style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.82rem',
-              background: '#059669', border: '2.5px solid #047857', borderRadius: 10,
-              padding: '8px 18px', color: 'white', cursor: 'pointer',
-              boxShadow: '3px 3px 0 #047857', opacity: saving ? 0.6 : 1,
-            }}>
-              {saving ? '⏳ Sauvegarde…' : '💾 Sauvegarder'}
+          <div style={{display:'flex',alignItems:'center',gap:8}}>
+            <button onClick={save} disabled={saving||!unsaved}
+              style={{fontSize:'0.76rem',fontWeight:600,background:(unsaved&&!saving)?'var(--accent)':'rgba(255,255,255,0.05)',border:`1px solid ${(unsaved&&!saving)?'transparent':'rgba(255,255,255,0.08)'}`,borderRadius:7,padding:'7px 16px',color:(unsaved&&!saving)?'white':'#4A3A2E',cursor:(unsaved&&!saving)?'pointer':'not-allowed',transition:'all 0.2s'}}>
+              {saving?'Sauvegarde…':'Sauvegarder'}
             </button>
-            <a href="/" target="_blank" style={{
-              fontFamily: 'var(--font-display)', fontSize: '0.8rem', fontWeight: 900,
-              color: '#7C3AED', textDecoration: 'none', padding: '7px 16px', borderRadius: 10,
-              background: 'white', border: '2.5px solid #EDE9FE', boxShadow: '2px 2px 0 #C4B5FD',
-            }}>
-              👁 Dashboard
+            <a href="/" target="_blank" style={{fontSize:'0.76rem',fontWeight:500,border:'1px solid rgba(255,255,255,0.08)',borderRadius:7,padding:'7px 14px',color:'#6B5A4A',textDecoration:'none',display:'inline-block'}}>
+              Dashboard ↗
             </a>
-            <button onClick={logout} style={{
-              fontFamily: 'var(--font-display)', fontSize: '0.8rem', fontWeight: 700,
-              background: 'rgba(255,255,255,0.1)', border: '2px solid rgba(255,255,255,0.2)',
-              borderRadius: 10, padding: '7px 14px', color: 'rgba(255,255,255,0.7)', cursor: 'pointer',
-            }}>
-              Déconnexion
-            </button>
+            <button onClick={logout} style={{fontSize:'0.76rem',fontWeight:500,background:'none',border:'1px solid rgba(255,255,255,0.06)',borderRadius:7,padding:'7px 12px',color:'#4A3A2E',cursor:'pointer'}}>Déconnexion</button>
           </div>
         </div>
       </header>
 
-      <main style={{ maxWidth: 1200, margin: '0 auto', padding: '28px 32px' }}>
+      <main style={{maxWidth:1280,margin:'0 auto',padding:'28px 32px 56px'}}>
 
         {/* Tabs */}
-        <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
+        <div style={{display:'flex',gap:0,marginBottom:28,borderBottom:'1px solid var(--border)'}}>
           {([
-            ['projects', `📁 Projets (${data.projects.length})`],
-            ['todos',    `✅ Quêtes (${data.weeklyTodos.length})`],
-            ['comments', `💬 Échanges (${comments.length})`],
-          ] as const).map(([t, label]) => (
-            <button key={t} onClick={() => setTab(t)} style={{
-              fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.82rem',
-              padding: '8px 18px', borderRadius: 10, cursor: 'pointer',
-              background: tab === t ? '#7C3AED' : 'white',
-              border: `2.5px solid ${tab === t ? '#5B21B6' : '#1E1B4B'}`,
-              color: tab === t ? 'white' : '#1E1B4B',
-              boxShadow: tab === t ? '3px 3px 0 #5B21B6' : '3px 3px 0 #1E1B4B',
-            }}>
+            ['projects',`Projets (${data.projects.length})`],
+            ['todos',   `Objectifs (${data.weeklyTodos.length})`],
+            ['comments',`Échanges (${comments.length})`],
+          ] as const).map(([t,label])=>(
+            <button key={t} onClick={()=>setTab(t)}
+              style={{fontSize:'0.78rem',fontWeight:tab===t?700:500,padding:'10px 20px',background:'none',border:'none',borderBottom:`2px solid ${tab===t?'var(--accent)':'transparent'}`,color:tab===t?'var(--accent)':'var(--text-3)',cursor:'pointer',letterSpacing:'0.01em',transition:'color 0.15s',marginBottom:-1}}>
               {label}
             </button>
           ))}
         </div>
 
-        {/* ═══ PROJECTS TAB ═══════════════════════════════════ */}
-        {tab === 'projects' && (
+        {/* ── PROJECTS ── */}
+        {tab==='projects'&&(
           <div>
-            {/* Add project button */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-              <button onClick={() => setShowAddProject(v => !v)} style={{
-                fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.85rem',
-                background: showAddProject ? '#EDE9FE' : '#7C3AED',
-                border: `2.5px solid ${showAddProject ? '#7C3AED' : '#5B21B6'}`,
-                borderRadius: 12, padding: '9px 20px',
-                color: showAddProject ? '#7C3AED' : 'white', cursor: 'pointer',
-                boxShadow: showAddProject ? '3px 3px 0 #7C3AED' : '3px 3px 0 #5B21B6',
-              }}>
-                {showAddProject ? '✕ Annuler' : '+ Nouveau projet'}
+            {/* Add button */}
+            <div style={{display:'flex',justifyContent:'flex-end',marginBottom:16}}>
+              <button onClick={()=>setShowAdd(v=>!v)}
+                style={{fontSize:'0.78rem',fontWeight:600,background:showAdd?'var(--surface-2)':'var(--accent)',border:`1px solid ${showAdd?'var(--border)':'transparent'}`,borderRadius:8,padding:'8px 16px',color:showAdd?'var(--text-2)':'white',cursor:'pointer',transition:'all 0.15s'}}>
+                {showAdd?'× Annuler':'+ Nouveau projet'}
               </button>
             </div>
 
-            {/* Add project form */}
-            {showAddProject && (
-              <div style={{
-                background: 'white', border: '2.5px solid #7C3AED', borderRadius: 18,
-                padding: '24px', marginBottom: 20, boxShadow: '4px 4px 0 #7C3AED',
-              }}>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '1.05rem', fontWeight: 900,
-                  color: '#7C3AED', marginBottom: 18, display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span>✨</span> Nouveau projet
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+            {/* Add form */}
+            {showAdd&&(
+              <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,padding:'24px',marginBottom:16,boxShadow:'var(--shadow-sm)'}} className="slide-up">
+                <p style={{fontSize:'0.72rem',fontWeight:700,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:18}}>Nouveau projet</p>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                  <div><FL>Nom *</FL><FI value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Ex: Interface CHORUS" /></div>
                   <div>
-                    <FLabel>Nom du projet *</FLabel>
-                    <FInput
-                      value={newProject.name}
-                      onChange={v => setNewProject(p => ({ ...p, name: v }))}
-                      placeholder="Ex: Interface CHORUS"
-                    />
-                  </div>
-                  <div>
-                    <FLabel>Statut</FLabel>
-                    <select
-                      value={newProject.status}
-                      onChange={e => setNewProject(p => ({ ...p, status: e.target.value as Status }))}
-                      style={selectStyle}>
-                      {STATUS_OPTIONS.map(o => (
-                        <option key={o} value={o}>{STATUS_META[o].icon} {STATUS_META[o].label}</option>
-                      ))}
+                    <FL>Statut</FL>
+                    <select value={form.status} onChange={e=>setForm(f=>({...f,status:e.target.value as Status}))} style={sel}>
+                      {STATUS_OPTIONS.map(o=><option key={o} value={o}>{STATUS_META[o].label}</option>)}
                     </select>
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                  <div><FL>En ce moment</FL><FI value={form.currentAction} onChange={v=>setForm(f=>({...f,currentAction:v}))} placeholder="Développement en cours…" /></div>
+                  <div><FL>Prochaine étape</FL><FI value={form.nextStep} onChange={v=>setForm(f=>({...f,nextStep:v}))} placeholder="Finaliser les tests…" /></div>
+                </div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:18}}>
                   <div>
-                    <FLabel>En ce moment (affiché manager)</FLabel>
-                    <FInput
-                      value={newProject.currentAction}
-                      onChange={v => setNewProject(p => ({ ...p, currentAction: v }))}
-                      placeholder="Ex: Développement en cours…"
-                    />
+                    <FL>Date d&apos;échéance</FL>
+                    <input type="date" value={form.dueDate??''} onChange={e=>setForm(f=>({...f,dueDate:e.target.value||undefined}))} style={{...inp,width:'100%'}} />
                   </div>
                   <div>
-                    <FLabel>Prochaine étape</FLabel>
-                    <FInput
-                      value={newProject.nextStep}
-                      onChange={v => setNewProject(p => ({ ...p, nextStep: v }))}
-                      placeholder="Ex: Finaliser les tests…"
-                    />
+                    <FL>Avancement initial — {form.progress}%</FL>
+                    <input type="range" min={0} max={100} value={form.progress} onChange={e=>setForm(f=>({...f,progress:+e.target.value}))} style={{width:'100%',accentColor:'var(--accent)',marginTop:10}} />
                   </div>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-                  <div>
-                    <FLabel>Date d&apos;échéance (optionnelle)</FLabel>
-                    <input type="date" value={newProject.dueDate ?? ''} onChange={e => setNewProject(p => ({ ...p, dueDate: e.target.value || undefined }))} style={{ ...inputStyle, width: '100%' }} />
-                  </div>
-                  <div>
-                    <FLabel>Avancement initial : {newProject.progress}%</FLabel>
-                    <input type="range" min={0} max={100} value={newProject.progress} onChange={e => setNewProject(p => ({ ...p, progress: Number(e.target.value) }))} style={{ width: '100%', accentColor: '#7C3AED', marginTop: 10, height: 6 }} />
-                  </div>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
-                  <button onClick={() => { setShowAddProject(false); setNewProject({ ...EMPTY_PROJECT }); }} style={{
-                    fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.82rem',
-                    background: 'white', border: '2.5px solid #E5E7EB', borderRadius: 10,
-                    padding: '8px 18px', color: '#6B7280', cursor: 'pointer',
-                    boxShadow: '2px 2px 0 #E5E7EB',
-                  }}>
-                    Annuler
-                  </button>
-                  <button onClick={addProject} disabled={!newProject.name.trim()} style={{
-                    fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.82rem',
-                    background: newProject.name.trim() ? '#7C3AED' : '#E5E7EB',
-                    border: `2.5px solid ${newProject.name.trim() ? '#5B21B6' : '#D1D5DB'}`,
-                    borderRadius: 10, padding: '8px 20px',
-                    color: newProject.name.trim() ? 'white' : '#9CA3AF',
-                    cursor: newProject.name.trim() ? 'pointer' : 'not-allowed',
-                    boxShadow: newProject.name.trim() ? '3px 3px 0 #5B21B6' : 'none',
-                  }}>
-                    ✨ Créer le projet
-                  </button>
+                <div style={{display:'flex',justifyContent:'flex-end',gap:8}}>
+                  <GBtn onClick={()=>{setShowAdd(false);setForm({...EMPTY});}}>Annuler</GBtn>
+                  <PBtn onClick={addProject} disabled={!form.name.trim()}>Créer le projet</PBtn>
                 </div>
               </div>
             )}
 
             {/* Project list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {sorted.map((p) => {
+            <div style={{display:'flex',flexDirection:'column',gap:6}}>
+              {sorted.map(p=>{
                 const sm = STATUS_META[p.status];
+                const isExp = expandedId===p.id;
+                const pDone = p.tasks.filter(t=>t.done).length;
+                const pCol = p.progress>=70?'#15803D':p.progress>=40?'#B45309':'#DC2626';
                 return (
-                  <div key={p.id} style={{
-                    background: 'white',
-                    border: `2.5px solid ${expandedId === p.id ? sm.color : '#1E1B4B'}`,
-                    borderRadius: 16, overflow: 'hidden',
-                    boxShadow: expandedId === p.id ? `4px 4px 0 ${sm.color}` : '3px 3px 0 #1E1B4B',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
-                  }}>
+                  <div key={p.id} style={{background:'var(--surface)',border:`1px solid ${isExp?sm.color+'55':'var(--border)'}`,borderRadius:10,overflow:'hidden',boxShadow:isExp?`var(--shadow-sm),0 0 0 3px ${sm.color}10`:'var(--shadow-xs)',transition:'all 0.2s'}}>
+                    {/* Status stripe */}
+                    <div style={{height:3,background:sm.color,opacity:0.8}} />
 
-                    {/* Row header */}
-                    <div
-                      onClick={() => setExpandedId(e => e === p.id ? null : p.id)}
-                      style={{ display: 'grid', gridTemplateColumns: '46px 1fr auto auto auto', gap: 12,
-                        padding: '12px 18px', alignItems: 'center', cursor: 'pointer', userSelect: 'none' }}>
-
-                      {/* Priority */}
-                      <div style={{
-                        width: 40, height: 40, borderRadius: 12,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 900,
-                        background: p.priority <= 3 ? '#EDE9FE' : '#F3F4F6',
-                        border: `2px solid ${p.priority <= 3 ? '#7C3AED' : '#9CA3AF'}`,
-                        color: p.priority <= 3 ? '#7C3AED' : '#6B7280',
-                        boxShadow: p.priority <= 3 ? '2px 2px 0 #7C3AED' : '2px 2px 0 #9CA3AF',
-                      }}>
-                        #{p.priority}
-                      </div>
-
-                      {/* Name + status */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.9rem' }}>
-                          {p.name}
-                        </span>
-                        <span style={{
-                          fontSize: '0.65rem', padding: '3px 9px', borderRadius: 8, fontWeight: 900,
-                          background: sm.bg, color: sm.color, border: `2px solid ${sm.color}`,
-                          fontFamily: 'var(--font-display)',
-                        }}>
-                          {sm.icon} {sm.label}
-                        </span>
-                      </div>
-
-                      {/* Progress bar */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 90, height: 10, background: '#F3F4F6', borderRadius: 99,
-                          overflow: 'hidden', border: '2px solid #E5E7EB' }}>
-                          <div style={{ height: '100%', width: `${p.progress}%`, borderRadius: 99,
-                            background: p.progress >= 70
-                              ? 'linear-gradient(90deg, #059669, #34D399)'
-                              : p.progress >= 40
-                                ? 'linear-gradient(90deg, #D97706, #FBBF24)'
-                                : 'linear-gradient(90deg, #DC2626, #F87171)' }} />
+                    {/* Row */}
+                    <div onClick={()=>setExpandedId(e=>e===p.id?null:p.id)}
+                      style={{display:'grid',gridTemplateColumns:'28px 1fr 140px auto',gap:14,padding:'12px 16px',alignItems:'center',cursor:'pointer'}}>
+                      <span style={{fontFamily:'var(--font-mono)',fontSize:'0.65rem',color:'var(--text-3)',textAlign:'center'}}>{p.priority}</span>
+                      <div>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                          <span style={{fontWeight:700,fontSize:'0.87rem',color:'var(--text)',letterSpacing:'-0.01em'}}>{p.name}</span>
+                          <span style={{fontSize:'0.62rem',fontWeight:600,padding:'2px 9px',borderRadius:99,background:sm.bg,color:sm.color,border:`1px solid ${sm.border}`}}>{sm.label}</span>
                         </div>
-                        <span style={{ fontFamily: 'var(--font-display)', fontSize: '0.75rem', fontWeight: 900,
-                          color: '#4B5563', minWidth: 36 }}>
-                          {p.progress}%
-                        </span>
+                        <p style={{fontSize:'0.74rem',color:'var(--text-3)',lineHeight:1.35,fontStyle:'italic'}}>{p.currentAction}</p>
                       </div>
-
-                      {/* Move buttons */}
-                      <div style={{ display: 'flex', gap: 5 }} onClick={e => e.stopPropagation()}>
-                        <SmallBtn onClick={() => moveProject(p.id, -1)}>↑</SmallBtn>
-                        <SmallBtn onClick={() => moveProject(p.id, 1)}>↓</SmallBtn>
+                      <div>
+                        <div style={{display:'flex',alignItems:'center',justifyContent:'flex-end',gap:8,marginBottom:5}}>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',color:'var(--text-3)'}}>{pDone}/{p.tasks.length}</span>
+                          <span style={{fontFamily:'var(--font-mono)',fontSize:'0.82rem',fontWeight:700,color:pCol}}>{p.progress}%</span>
+                        </div>
+                        <div style={{height:3,background:'var(--surface-2)',borderRadius:99,overflow:'hidden'}}>
+                          <div style={{height:'100%',width:`${p.progress}%`,borderRadius:99,background:pCol,opacity:0.8}} />
+                        </div>
                       </div>
-
-                      {/* Delete */}
-                      <div onClick={e => e.stopPropagation()}>
-                        <button onClick={() => deleteProject(p.id)} style={{
-                          background: '#FEE2E2', border: '2px solid #DC2626', borderRadius: 8,
-                          padding: '4px 10px', color: '#DC2626', cursor: 'pointer',
-                          fontFamily: 'var(--font-display)', fontSize: '0.7rem', fontWeight: 900,
-                          boxShadow: '2px 2px 0 #DC2626',
-                        }}>
-                          ✕
-                        </button>
+                      <div style={{display:'flex',gap:5}} onClick={e=>e.stopPropagation()}>
+                        <IconBtn onClick={()=>moveProject(p.id,-1)}>↑</IconBtn>
+                        <IconBtn onClick={()=>moveProject(p.id,1)}>↓</IconBtn>
+                        <IconBtn onClick={()=>deleteProject(p.id)} danger>×</IconBtn>
                       </div>
                     </div>
 
                     {/* Expanded editor */}
-                    {expandedId === p.id && (
-                      <div style={{ borderTop: `2px solid ${sm.color}`, padding: '22px 20px',
-                        background: sm.bg + '33' }}>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                    {isExp&&(
+                      <div style={{borderTop:'1px solid var(--border)',padding:'20px',background:'var(--surface-2)'}} className="fade-in">
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                          <div><FL>Nom du projet</FL><FI value={p.name} onChange={v=>upProject(p.id,{name:v})} /></div>
                           <div>
-                            <FLabel>Nom du projet</FLabel>
-                            <FInput value={p.name} onChange={v => upProject(p.id, { name: v })} />
-                          </div>
-                          <div>
-                            <FLabel>Statut</FLabel>
-                            <select value={p.status}
-                              onChange={e => upProject(p.id, { status: e.target.value as Status })}
-                              style={selectStyle}>
-                              {STATUS_OPTIONS.map(o => (
-                                <option key={o} value={o}>{STATUS_META[o].icon} {STATUS_META[o].label}</option>
-                              ))}
+                            <FL>Statut</FL>
+                            <select value={p.status} onChange={e=>upProject(p.id,{status:e.target.value as Status})} style={sel}>
+                              {STATUS_OPTIONS.map(o=><option key={o} value={o}>{STATUS_META[o].label}</option>)}
                             </select>
                           </div>
                         </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-                          <div>
-                            <FLabel>En ce moment (affiché manager)</FLabel>
-                            <FInput value={p.currentAction} onChange={v => upProject(p.id, { currentAction: v })} />
-                          </div>
-                          <div>
-                            <FLabel>Prochaine étape</FLabel>
-                            <FInput value={p.nextStep} onChange={v => upProject(p.id, { nextStep: v })} />
-                          </div>
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                          <div><FL>En ce moment</FL><FI value={p.currentAction} onChange={v=>upProject(p.id,{currentAction:v})} /></div>
+                          <div><FL>Prochaine étape</FL><FI value={p.nextStep} onChange={v=>upProject(p.id,{nextStep:v})} /></div>
                         </div>
-
-                        <div style={{ marginBottom: 14 }}>
-                          <FLabel>Date d&apos;échéance (optionnelle)</FLabel>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                            <input
-                              type="date"
-                              value={p.dueDate ?? ''}
-                              onChange={e => upProject(p.id, { dueDate: e.target.value || undefined })}
-                              style={{ ...inputStyle, flex: 1 }}
-                            />
-                            {p.dueDate && (
-                              <button onClick={() => upProject(p.id, { dueDate: undefined })} style={{ fontFamily: 'var(--font-display)', fontSize: '0.72rem', fontWeight: 900, background: '#FEE2E2', border: '2px solid #DC2626', borderRadius: 8, padding: '6px 12px', color: '#DC2626', cursor: 'pointer', boxShadow: '2px 2px 0 #DC2626' }}>
-                                ✕ Effacer
-                              </button>
-                            )}
+                        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+                          <div>
+                            <FL>Date d&apos;échéance</FL>
+                            <div style={{display:'flex',gap:8}}>
+                              <input type="date" value={p.dueDate??''} onChange={e=>upProject(p.id,{dueDate:e.target.value||undefined})} style={{...inp,flex:1}} />
+                              {p.dueDate&&<GBtn onClick={()=>upProject(p.id,{dueDate:undefined})}>Effacer</GBtn>}
+                            </div>
                           </div>
-                        </div>
-
-                        <div style={{ marginBottom: 14 }}>
-                          <FLabel>Avancement : {p.progress}%</FLabel>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <input
-                              type="range" min={0} max={100} value={p.progress}
-                              onChange={e => upProject(p.id, { progress: Number(e.target.value) })}
-                              style={{ flex: 1, accentColor: sm.color, height: 6 }}
-                            />
-                            <div style={{ width: 70, height: 10, background: '#F3F4F6', borderRadius: 99,
-                              overflow: 'hidden', border: '2px solid #E5E7EB' }}>
-                              <div style={{ height: '100%', width: `${p.progress}%`, borderRadius: 99,
-                                background: p.progress >= 70
-                                  ? 'linear-gradient(90deg, #059669, #34D399)'
-                                  : p.progress >= 40
-                                    ? 'linear-gradient(90deg, #D97706, #FBBF24)'
-                                    : 'linear-gradient(90deg, #DC2626, #F87171)' }} />
+                          <div>
+                            <FL>Avancement — {p.progress}%</FL>
+                            <div style={{display:'flex',alignItems:'center',gap:10}}>
+                              <input type="range" min={0} max={100} value={p.progress} onChange={e=>upProject(p.id,{progress:+e.target.value})} style={{flex:1,accentColor:sm.color,cursor:'pointer'}} />
+                              <div style={{width:50,height:6,background:'var(--surface-3)',borderRadius:99,overflow:'hidden'}}>
+                                <div style={{height:'100%',width:`${p.progress}%`,background:sm.color,opacity:0.8}} />
+                              </div>
                             </div>
                           </div>
                         </div>
-
-                        <div style={{ marginBottom: 16 }}>
-                          <FLabel>Notes internes (non visibles sur le dashboard)</FLabel>
-                          <textarea
-                            value={p.notes ?? ''}
-                            onChange={e => upProject(p.id, { notes: e.target.value })}
-                            rows={2}
-                            placeholder="Notes admin…"
-                            style={{ ...inputStyle, resize: 'vertical', width: '100%' }}
-                          />
+                        <div style={{marginBottom:16}}>
+                          <FL>Notes internes</FL>
+                          <textarea value={p.notes??''} onChange={e=>upProject(p.id,{notes:e.target.value})} rows={2} placeholder="Notes admin…"
+                            style={{...inp,resize:'vertical',width:'100%'}} />
                         </div>
 
-                        <FLabel>Tâches · {p.tasks.filter(t => t.done).length}/{p.tasks.length} complétées</FLabel>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
-                          {p.tasks.map(t => (
-                            <div key={t.id} style={{
-                              display: 'flex', alignItems: 'center', gap: 10,
-                              background: 'white',
-                              border: `2px solid ${t.done ? '#059669' : '#E5E7EB'}`,
-                              borderRadius: 10, padding: '8px 12px',
-                              boxShadow: t.done ? '2px 2px 0 #059669' : '1px 1px 0 #E5E7EB',
-                            }}>
-                              <input type="checkbox" checked={t.done}
-                                onChange={() => toggleTask(p.id, t.id)}
-                                style={{ accentColor: '#059669', width: 16, height: 16 }} />
-                              <span style={{ flex: 1, fontSize: '0.82rem',
-                                textDecoration: t.done ? 'line-through' : 'none',
-                                color: t.done ? '#9CA3AF' : '#374151',
-                                fontWeight: t.done ? 400 : 500 }}>
-                                {t.label}
-                              </span>
-                              <button onClick={() => removeTask(p.id, t.id)} style={{
-                                background: 'none', border: 'none', color: '#DC2626',
-                                cursor: 'pointer', fontSize: '0.8rem', opacity: 0.7,
-                                fontWeight: 900, padding: '2px 6px',
-                              }}>✕</button>
+                        {/* Tasks */}
+                        <FL>Tâches — {pDone}/{p.tasks.length} complétées</FL>
+                        <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:10}}>
+                          {p.tasks.map(t=>(
+                            <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,background:'var(--surface)',border:`1px solid ${t.done?'#86EFAC':'var(--border)'}`,borderRadius:7,padding:'8px 12px',transition:'border-color 0.15s'}}>
+                              <input type="checkbox" checked={t.done} onChange={()=>toggleTask(p.id,t.id)} style={{accentColor:'#15803D',width:15,height:15,cursor:'pointer'}} />
+                              <span style={{flex:1,fontSize:'0.8rem',textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-3)':'var(--text-2)',fontWeight:t.done?400:500}}>{t.label}</span>
+                              <button onClick={()=>removeTask(p.id,t.id)} style={{background:'none',border:'none',color:'var(--text-3)',cursor:'pointer',fontSize:'0.8rem',opacity:0.4,padding:'0 4px'}}>×</button>
                             </div>
                           ))}
                         </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                          <input
-                            value={newTaskLabel}
-                            onChange={e => setNewTaskLabel(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && addTask(p.id)}
-                            placeholder="Nouvelle tâche… (Entrée)"
-                            style={{ ...inputStyle, flex: 1 }}
-                          />
-                          <button onClick={() => addTask(p.id)} style={{
-                            fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.78rem',
-                            background: '#EDE9FE', border: '2px solid #7C3AED', borderRadius: 10,
-                            padding: '7px 16px', color: '#7C3AED', cursor: 'pointer',
-                            boxShadow: '2px 2px 0 #7C3AED',
-                          }}>
-                            + Ajouter
-                          </button>
+                        <div style={{display:'flex',gap:8}}>
+                          <input value={newTask} onChange={e=>setNewTask(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTask(p.id)} placeholder="Nouvelle tâche… (Entrée)"
+                            style={{...inp,flex:1}} />
+                          <GBtn onClick={()=>addTask(p.id)}>+ Ajouter</GBtn>
                         </div>
                       </div>
                     )}
@@ -605,106 +356,54 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ═══ TODOS TAB ══════════════════════════════════════ */}
-        {tab === 'todos' && (
-          <div style={{ maxWidth: 640 }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 14 }}>
-              {data.weeklyTodos.map(t => (
-                <div key={t.id} style={{
-                  display: 'flex', alignItems: 'center', gap: 12,
-                  background: 'white',
-                  border: `2.5px solid ${t.done ? '#059669' : '#1E1B4B'}`,
-                  borderRadius: 12, padding: '11px 16px',
-                  boxShadow: t.done ? '3px 3px 0 #059669' : '3px 3px 0 #1E1B4B',
-                }}>
-                  <input type="checkbox" checked={t.done} onChange={() => toggleTodo(t.id)}
-                    style={{ accentColor: '#059669', width: 18, height: 18 }} />
-                  <span style={{ flex: 1, fontSize: '0.88rem', fontWeight: t.done ? 400 : 600,
-                    textDecoration: t.done ? 'line-through' : 'none',
-                    color: t.done ? '#9CA3AF' : '#1E1B4B' }}>
-                    {t.label}
-                  </span>
-                  <button onClick={() => removeTodo(t.id)} style={{
-                    background: 'none', border: 'none', color: '#DC2626',
-                    cursor: 'pointer', fontSize: '0.8rem', fontWeight: 900, opacity: 0.7,
-                  }}>✕</button>
+        {/* ── TODOS ── */}
+        {tab==='todos'&&(
+          <div style={{maxWidth:640}}>
+            <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
+              {data.weeklyTodos.map(t=>(
+                <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--surface)',border:`1px solid ${t.done?'#86EFAC':'var(--border)'}`,borderRadius:9,padding:'11px 14px',transition:'border-color 0.15s'}}>
+                  <input type="checkbox" checked={t.done} onChange={()=>toggleTodo(t.id)} style={{accentColor:'#15803D',width:16,height:16,cursor:'pointer'}} />
+                  <span style={{flex:1,fontSize:'0.85rem',fontWeight:t.done?400:500,textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-3)':'var(--text)'}}>{t.label}</span>
+                  <button onClick={()=>removeTodo(t.id)} style={{background:'none',border:'none',color:'var(--text-3)',cursor:'pointer',fontSize:'0.78rem',opacity:0.4,padding:'0 4px'}}>×</button>
                 </div>
               ))}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={newTodoLabel}
-                onChange={e => setNewTodoLabel(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addTodo()}
-                placeholder="Nouvelle quête de la semaine… (Entrée)"
-                style={{ ...inputStyle, flex: 1 }}
-              />
-              <button onClick={addTodo} style={{
-                fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.82rem',
-                background: '#7C3AED', border: '2.5px solid #5B21B6', borderRadius: 10,
-                padding: '9px 20px', color: 'white', cursor: 'pointer',
-                boxShadow: '3px 3px 0 #5B21B6',
-              }}>
-                + Ajouter
-              </button>
+            <div style={{display:'flex',gap:8}}>
+              <input value={newTodo} onChange={e=>setNewTodo(e.target.value)} onKeyDown={e=>e.key==='Enter'&&addTodo()} placeholder="Nouvel objectif de la semaine… (Entrée)"
+                style={{...inp,flex:1}} />
+              <GBtn onClick={addTodo}>+ Ajouter</GBtn>
             </div>
           </div>
         )}
 
-        {/* ═══ COMMENTS TAB ═══════════════════════════════════ */}
-        {tab === 'comments' && (
-          <div style={{ maxWidth: 780 }}>
-            {comments.length === 0 && (
-              <div style={{ textAlign: 'center', padding: '48px 0' }}>
-                <div style={{ fontSize: '2.5rem', marginBottom: 10 }}>💬</div>
-                <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.9rem', fontWeight: 700, color: '#9CA3AF' }}>
-                  Aucun échange pour l'instant.
-                </div>
+        {/* ── COMMENTS ── */}
+        {tab==='comments'&&(
+          <div style={{maxWidth:820}}>
+            {comments.length===0&&(
+              <div style={{textAlign:'center',padding:'60px 0',color:'var(--text-3)'}}>
+                <p style={{fontSize:'0.82rem',fontWeight:500}}>Aucun échange pour l&apos;instant.</p>
               </div>
             )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {comments.map(c => {
-                const isM = c.author === 'manager';
+            <div style={{display:'flex',flexDirection:'column',gap:7}}>
+              {comments.map(c=>{
+                const isM = c.author==='manager';
+                const isDecision = c.projectId?.startsWith('decision:');
                 return (
-                  <div key={c.id} style={{
-                    display: 'flex', gap: 14, background: 'white',
-                    border: `2.5px solid ${isM ? '#2563EB' : '#059669'}`,
-                    borderRadius: 14, padding: '14px 18px',
-                    boxShadow: `3px 3px 0 ${isM ? '#1D4ED8' : '#047857'}`,
-                    alignItems: 'flex-start',
-                  }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: 10, flexShrink: 0,
-                      background: isM ? '#DBEAFE' : '#D1FAE5',
-                      border: `2px solid ${isM ? '#2563EB' : '#059669'}`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem',
-                    }}>
-                      {isM ? '👔' : '💻'}
+                  <div key={c.id} style={{display:'flex',gap:14,background:'var(--surface)',border:`1px solid ${isM?'#C4C2F7':'#86EFAC'}`,borderRadius:10,padding:'14px 16px',alignItems:'flex-start',boxShadow:'var(--shadow-xs)'}}>
+                    <div style={{width:34,height:34,borderRadius:9,flexShrink:0,background:isM?'#EEEDFD':'#ECFDF5',border:`1px solid ${isM?'#C4C2F7':'#86EFAC'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.75rem',fontWeight:700,color:isM?'#4F46E5':'#15803D'}}>
+                      {isM?'M':'V'}
                     </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 900, fontSize: '0.82rem',
-                          color: isM ? '#2563EB' : '#059669' }}>
-                          {isM ? 'Manager' : 'Valentin'}
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: '#9CA3AF',
-                          background: '#F3F4F6', borderRadius: 6, padding: '2px 7px' }}>
-                          Projet : {c.projectId}
-                        </span>
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: '#9CA3AF' }}>
-                          {new Date(c.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                        </span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}}>
+                        <span style={{fontWeight:700,fontSize:'0.78rem',color:isM?'#4F46E5':'#15803D'}}>{isM?'Manager':'Valentin'}</span>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'var(--text-3)',background:'var(--surface-2)',borderRadius:5,padding:'2px 7px'}}>{isDecision?'Décision':c.projectId}</span>
+                        <span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'var(--text-3)'}}>{new Date(c.createdAt).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}</span>
                       </div>
-                      <div style={{ fontSize: '0.87rem', color: '#374151', lineHeight: 1.5 }}>
-                        {c.text}
-                      </div>
+                      <p style={{fontSize:'0.84rem',color:'var(--text-2)',lineHeight:1.5}}>{c.text}</p>
                     </div>
-                    <button onClick={() => deleteComment(c.id)} style={{
-                      background: '#FEE2E2', border: '2px solid #DC2626', borderRadius: 8,
-                      padding: '5px 10px', color: '#DC2626', cursor: 'pointer',
-                      fontFamily: 'var(--font-display)', fontSize: '0.72rem', fontWeight: 900,
-                      boxShadow: '2px 2px 0 #DC2626', flexShrink: 0,
-                    }}>
+                    <button onClick={()=>deleteComment(c.id)} style={{fontSize:'0.7rem',fontWeight:600,background:'var(--surface-2)',border:'1px solid var(--border)',borderRadius:6,padding:'4px 10px',color:'var(--text-3)',cursor:'pointer',flexShrink:0,transition:'all 0.15s'}}
+                      onMouseOver={e=>{e.currentTarget.style.background='#FEF2F2';e.currentTarget.style.color='#DC2626';e.currentTarget.style.borderColor='#FCA5A5';}}
+                      onMouseOut={e=>{e.currentTarget.style.background='var(--surface-2)';e.currentTarget.style.color='var(--text-3)';e.currentTarget.style.borderColor='var(--border)';}}>
                       Suppr.
                     </button>
                   </div>
@@ -718,46 +417,47 @@ export default function AdminPage() {
   );
 }
 
-/* ─── Shared styles ──────────────────────────────────────────── */
-const inputStyle: React.CSSProperties = {
-  fontFamily: 'var(--font-body)', fontSize: '0.84rem',
-  background: 'white', border: '2px solid #C4B5FD',
-  borderRadius: 10, padding: '8px 12px', color: '#1E1B4B', outline: 'none',
-  boxShadow: '2px 2px 0 #C4B5FD',
+/* ─── Styles & primitives ───────────────────────────────── */
+const inp: React.CSSProperties = {
+  fontFamily: 'var(--font-body)', fontSize: '0.82rem',
+  background: 'var(--surface)', border: '1px solid var(--border)',
+  borderRadius: 7, padding: '8px 12px', color: 'var(--text)', outline: 'none',
+  caretColor: 'var(--accent)',
 };
 
-const selectStyle: React.CSSProperties = {
-  ...inputStyle, width: '100%', cursor: 'pointer',
-};
+const sel: React.CSSProperties = { ...inp, width: '100%', cursor: 'pointer' };
 
-function FLabel({ children }: { children: React.ReactNode }) {
+function FL({ children }: { children: React.ReactNode }) {
+  return <p style={{ fontSize: '0.61rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 7 }}>{children}</p>;
+}
+
+function FI({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return <input value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={{ ...inp, width: '100%' }} />;
+}
+
+function GBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
   return (
-    <div style={{ fontFamily: 'var(--font-display)', fontSize: '0.65rem', fontWeight: 900,
-      textTransform: 'uppercase', letterSpacing: '0.07em', color: '#6B7280', marginBottom: 6 }}>
+    <button onClick={onClick} style={{ fontSize: '0.74rem', fontWeight: 600, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 7, padding: '7px 14px', color: 'var(--text-2)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
       {children}
-    </div>
+    </button>
   );
 }
 
-function FInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+function PBtn({ onClick, disabled, children }: { onClick: () => void; disabled?: boolean; children: React.ReactNode }) {
   return (
-    <input
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      placeholder={placeholder}
-      style={{ ...inputStyle, width: '100%' }}
-    />
+    <button onClick={onClick} disabled={disabled}
+      style={{ fontSize: '0.74rem', fontWeight: 600, background: disabled ? 'var(--border)' : 'var(--accent)', border: 'none', borderRadius: 7, padding: '7px 16px', color: disabled ? 'var(--text-3)' : 'white', cursor: disabled ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}>
+      {children}
+    </button>
   );
 }
 
-function SmallBtn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+function IconBtn({ onClick, children, danger }: { onClick: () => void; children: React.ReactNode; danger?: boolean }) {
   return (
-    <button onClick={onClick} style={{
-      fontFamily: 'var(--font-display)', fontSize: '0.78rem', fontWeight: 900,
-      background: 'white', border: '2px solid #1E1B4B', borderRadius: 8,
-      padding: '5px 10px', cursor: 'pointer', color: '#1E1B4B',
-      boxShadow: '2px 2px 0 #1E1B4B',
-    }}>
+    <button onClick={onClick}
+      style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: danger ? 'transparent' : 'var(--surface-2)', border: `1px solid ${danger ? 'var(--border)' : 'var(--border)'}`, borderRadius: 6, cursor: 'pointer', color: danger ? 'var(--text-3)' : 'var(--text-2)', fontSize: '0.75rem', fontWeight: 700, transition: 'all 0.15s' }}
+      onMouseOver={e => { e.currentTarget.style.background = danger ? '#FEF2F2' : 'var(--surface-3)'; if (danger) e.currentTarget.style.color = '#DC2626'; }}
+      onMouseOut={e => { e.currentTarget.style.background = danger ? 'transparent' : 'var(--surface-2)'; if (danger) e.currentTarget.style.color = 'var(--text-3)'; }}>
       {children}
     </button>
   );

@@ -2,68 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900&family=DM+Mono:wght@400;500&display=swap');
 
+/* ─── Design tokens ─────────────────────────────────────── */
 :root {
-  /* Backgrounds */
-  --bg:         #F8FAFC;
-  --surface:    #FFFFFF;
-  --surface-2:  #F1F5F9;
+  /* Warm neutrals */
+  --bg:          #F7F3EE;
+  --surface:     #FFFFFF;
+  --surface-2:   #F0EAE0;
+  --surface-3:   #E8DFD0;
 
   /* Borders */
-  --border:     #E2E8F0;
-  --border-2:   #CBD5E1;
+  --border:      #E0D6C8;
+  --border-2:    #C9BBA9;
 
   /* Text */
-  --text:       #0F172A;
-  --text-2:     #475569;
-  --text-3:     #94A3B8;
+  --text:        #1C1612;
+  --text-2:      #6B5B4A;
+  --text-3:      #A8937A;
 
-  /* Accent — indigo */
-  --accent:        #6366F1;
-  --accent-dark:   #4338CA;
-  --accent-light:  #EEF2FF;
-  --accent-border: #C7D2FE;
+  /* Accent — amber/ochre */
+  --accent:         #C2700A;
+  --accent-dark:    #92520A;
+  --accent-light:   #FEF3E2;
+  --accent-border:  #F6C27A;
 
   /* Status */
-  --s-active-color:  #6366F1; --s-active-bg:   #EEF2FF; --s-active-border: #C7D2FE;
-  --s-deploy-color:  #D97706; --s-deploy-bg:   #FFFBEB; --s-deploy-border: #FDE68A;
-  --s-done-color:    #059669; --s-done-bg:     #ECFDF5; --s-done-border:   #A7F3D0;
-  --s-blocked-color: #DC2626; --s-blocked-bg:  #FEF2F2; --s-blocked-border:#FECACA;
-  --s-frame-color:   #64748B; --s-frame-bg:    #F8FAFC; --s-frame-border:  #E2E8F0;
+  --s-active-color:  #4F46E5; --s-active-bg:   #EEEDFD; --s-active-border: #C4C2F7;
+  --s-deploy-color:  #B45309; --s-deploy-bg:   #FEF3E2; --s-deploy-border: #F6C27A;
+  --s-done-color:    #15803D; --s-done-bg:     #ECFDF5; --s-done-border:   #86EFAC;
+  --s-blocked-color: #DC2626; --s-blocked-bg:  #FEF2F2; --s-blocked-border:#FCA5A5;
+  --s-frame-color:   #78716C; --s-frame-bg:    #F5F0EA; --s-frame-border:  #D6CFC7;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(15,23,42,0.04);
-  --shadow-sm: 0 1px 3px rgba(15,23,42,0.08), 0 1px 2px rgba(15,23,42,0.04);
-  --shadow-md: 0 4px 8px rgba(15,23,42,0.08), 0 2px 4px rgba(15,23,42,0.04);
-  --shadow-lg: 0 12px 24px rgba(15,23,42,0.10), 0 4px 8px rgba(15,23,42,0.06);
+  /* Header */
+  --header:      #1C1612;
+  --header-border: #2D2420;
 
-  /* Fonts */
-  --font-display: 'Inter', system-ui, sans-serif;
-  --font-body:    'Inter', system-ui, sans-serif;
-  --font-mono:    'DM Mono', monospace;
+  /* Typography */
+  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono:    'DM Mono', 'Courier New', monospace;
+
+  /* Shadows — warm tint */
+  --shadow-xs: 0 1px 2px rgba(28, 22, 18, 0.05);
+  --shadow-sm: 0 1px 4px rgba(28, 22, 18, 0.08), 0 1px 2px rgba(28, 22, 18, 0.04);
+  --shadow-md: 0 4px 12px rgba(28, 22, 18, 0.09), 0 2px 4px rgba(28, 22, 18, 0.05);
+  --shadow-lg: 0 12px 32px rgba(28, 22, 18, 0.12), 0 4px 8px rgba(28, 22, 18, 0.06);
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* ─── Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
 
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
 }
 
-::selection { background: #6366F122; }
+/* Warm noise texture on background */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 128px;
+}
+
+main, header, aside, section, article { position: relative; z-index: 1; }
+
+::selection { background: #C2700A22; color: var(--text); }
 
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
 
-/* ─── Animations ───────────────────────────────────────── */
+input, textarea, select, button { font-family: var(--font-body); }
+button { cursor: pointer; }
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* ─── Animations ────────────────────────────────────────── */
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
@@ -72,30 +105,20 @@ body {
   to   { opacity: 1; }
 }
 
-@keyframes progressFill {
-  from { transform: scaleX(0); }
-  to   { transform: scaleX(1); }
-}
+.slide-up { animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.fade-in  { animation: fadeIn  0.22s ease both; }
 
-.slide-up { animation: slideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.fade-in  { animation: fadeIn  0.25s ease both; }
+/* ─── Utility ───────────────────────────────────────────── */
+.tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+.mono    { font-family: var(--font-mono); }
+.caps    { text-transform: uppercase; letter-spacing: 0.08em; }
 
-/* ─── Input / button reset ─────────────────────────────── */
-input, textarea, select, button {
-  font-family: var(--font-body);
-}
-
-/* ─── Focus ring ────────────────────────────────────────── */
-:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-/* ─── Print / PDF ───────────────────────────────────────── */
+/* ─── Print ─────────────────────────────────────────────── */
 @media print {
   @page { size: A4; margin: 14mm 12mm; }
   body { background: white !important; }
-  header, .no-print { display: none !important; }
-  * { box-shadow: none !important; animation: none !important; }
+  body::before { display: none; }
+  header, .no-print, button, input, select, textarea { display: none !important; }
+  * { box-shadow: none !important; animation: none !important; color-adjust: exact; }
   .slide-up { page-break-inside: avoid; }
 }
