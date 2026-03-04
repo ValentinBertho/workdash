@@ -1,14 +1,17 @@
 import { Redis } from '@upstash/redis';
-import { DashboardData, Comment } from '@/types';
+import { DashboardData, Comment, ChangelogEntry, ManagerTask } from '@/types';
 
 const kv = new Redis({
   url: process.env.UPSTASH_REDIS_REST_URL!,
   token: process.env.UPSTASH_REDIS_REST_TOKEN!,
 });
 
-const DATA_KEY = 'dashboard:data';
-const COMMENTS_KEY = 'dashboard:comments';
+const DATA_KEY          = 'dashboard:data';
+const COMMENTS_KEY      = 'dashboard:comments';
+const CHANGELOG_KEY     = 'dashboard:changelog';
+const MANAGER_TASKS_KEY = 'dashboard:manager-tasks';
 
+/* ─── Dashboard data ─────────────────────────────────────────── */
 export const defaultData: DashboardData = {
   updatedAt: new Date().toISOString(),
   weeklyTodos: [
@@ -128,22 +131,19 @@ export async function getData(): Promise<DashboardData> {
   try {
     const data = await kv.get<DashboardData>(DATA_KEY);
     return data ?? defaultData;
-  } catch {
-    return defaultData;
-  }
+  } catch { return defaultData; }
 }
 
 export async function saveData(data: DashboardData): Promise<void> {
   await kv.set(DATA_KEY, { ...data, updatedAt: new Date().toISOString() });
 }
 
+/* ─── Comments ───────────────────────────────────────────────── */
 export async function getComments(): Promise<Comment[]> {
   try {
     const comments = await kv.get<Comment[]>(COMMENTS_KEY);
     return comments ?? [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 }
 
 export async function saveComment(comment: Comment): Promise<void> {
@@ -154,4 +154,43 @@ export async function saveComment(comment: Comment): Promise<void> {
 export async function deleteComment(id: string): Promise<void> {
   const existing = await getComments();
   await kv.set(COMMENTS_KEY, existing.filter(c => c.id !== id));
+}
+
+/* ─── Changelog ──────────────────────────────────────────────── */
+export async function getChangelog(): Promise<ChangelogEntry[]> {
+  try {
+    const entries = await kv.get<ChangelogEntry[]>(CHANGELOG_KEY);
+    return entries ?? [];
+  } catch { return []; }
+}
+
+export async function addChangelogEntries(entries: ChangelogEntry[]): Promise<void> {
+  if (entries.length === 0) return;
+  const existing = await getChangelog();
+  const merged = [...existing, ...entries];
+  // Keep last 500 entries
+  await kv.set(CHANGELOG_KEY, merged.slice(-500));
+}
+
+/* ─── Manager tasks ──────────────────────────────────────────── */
+export async function getManagerTasks(): Promise<ManagerTask[]> {
+  try {
+    const tasks = await kv.get<ManagerTask[]>(MANAGER_TASKS_KEY);
+    return tasks ?? [];
+  } catch { return []; }
+}
+
+export async function saveManagerTask(task: ManagerTask): Promise<void> {
+  const existing = await getManagerTasks();
+  await kv.set(MANAGER_TASKS_KEY, [...existing, task]);
+}
+
+export async function updateManagerTask(id: string, updates: Partial<ManagerTask>): Promise<void> {
+  const existing = await getManagerTasks();
+  await kv.set(MANAGER_TASKS_KEY, existing.map(t => t.id === id ? { ...t, ...updates } : t));
+}
+
+export async function deleteManagerTask(id: string): Promise<void> {
+  const existing = await getManagerTasks();
+  await kv.set(MANAGER_TASKS_KEY, existing.filter(t => t.id !== id));
 }

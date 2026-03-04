@@ -12,7 +12,7 @@ const STATUS_META: Record<Status, { label: string; icon: string; color: string; 
 };
 
 const EMPTY_PROJECT = {
-  name: '', status: 'en-cours' as Status, currentAction: '', nextStep: '', progress: 0,
+  name: '', status: 'en-cours' as Status, currentAction: '', nextStep: '', progress: 0, dueDate: undefined as string | undefined,
 };
 
 export default function AdminPage() {
@@ -123,6 +123,7 @@ export default function AdminPage() {
       currentAction: newProject.currentAction.trim() || 'Démarrage du projet',
       nextStep: newProject.nextStep.trim() || 'À définir',
       tasks: [],
+      dueDate: newProject.dueDate || undefined,
     };
     setData({ ...data, projects: [...data.projects, project] });
     setNewProject({ ...EMPTY_PROJECT });
@@ -354,13 +355,15 @@ export default function AdminPage() {
                     />
                   </div>
                 </div>
-                <div style={{ marginBottom: 18 }}>
-                  <FLabel>Avancement initial : {newProject.progress}%</FLabel>
-                  <input
-                    type="range" min={0} max={100} value={newProject.progress}
-                    onChange={e => setNewProject(p => ({ ...p, progress: Number(e.target.value) }))}
-                    style={{ width: '100%', accentColor: '#7C3AED', marginTop: 6, height: 6 }}
-                  />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
+                  <div>
+                    <FLabel>Date d&apos;échéance (optionnelle)</FLabel>
+                    <input type="date" value={newProject.dueDate ?? ''} onChange={e => setNewProject(p => ({ ...p, dueDate: e.target.value || undefined }))} style={{ ...inputStyle, width: '100%' }} />
+                  </div>
+                  <div>
+                    <FLabel>Avancement initial : {newProject.progress}%</FLabel>
+                    <input type="range" min={0} max={100} value={newProject.progress} onChange={e => setNewProject(p => ({ ...p, progress: Number(e.target.value) }))} style={{ width: '100%', accentColor: '#7C3AED', marginTop: 10, height: 6 }} />
+                  </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
                   <button onClick={() => { setShowAddProject(false); setNewProject({ ...EMPTY_PROJECT }); }} style={{
@@ -498,6 +501,23 @@ export default function AdminPage() {
                           <div>
                             <FLabel>Prochaine étape</FLabel>
                             <FInput value={p.nextStep} onChange={v => upProject(p.id, { nextStep: v })} />
+                          </div>
+                        </div>
+
+                        <div style={{ marginBottom: 14 }}>
+                          <FLabel>Date d&apos;échéance (optionnelle)</FLabel>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <input
+                              type="date"
+                              value={p.dueDate ?? ''}
+                              onChange={e => upProject(p.id, { dueDate: e.target.value || undefined })}
+                              style={{ ...inputStyle, flex: 1 }}
+                            />
+                            {p.dueDate && (
+                              <button onClick={() => upProject(p.id, { dueDate: undefined })} style={{ fontFamily: 'var(--font-display)', fontSize: '0.72rem', fontWeight: 900, background: '#FEE2E2', border: '2px solid #DC2626', borderRadius: 8, padding: '6px 12px', color: '#DC2626', cursor: 'pointer', boxShadow: '2px 2px 0 #DC2626' }}>
+                                ✕ Effacer
+                              </button>
+                            )}
                           </div>
                         </div>
 

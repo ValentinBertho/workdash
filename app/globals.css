@@ -128,3 +128,26 @@ body {
 input, textarea, select, button {
   font-family: var(--font-body);
 }
+
+/* ─── Print / PDF ───────────────────────────────────────── */
+@media print {
+  @page { size: A4; margin: 16mm 14mm; }
+
+  body { background: white !important; }
+
+  header, .no-print-hide, button, input, select, textarea { display: none !important; }
+
+  #print-root { padding: 0 !important; }
+
+  /* Remove cartoon shadows & borders for clean print */
+  * { box-shadow: none !important; animation: none !important; }
+
+  /* Show cards with simple border */
+  [style*="border-radius"] { border-radius: 6px !important; }
+
+  /* Expand all project cards */
+  [style*="overflow: hidden"] { overflow: visible !important; }
+
+  /* Section breaks */
+  .slide-up { page-break-inside: avoid; }
+}
