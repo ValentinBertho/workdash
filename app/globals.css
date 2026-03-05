@@ -4,58 +4,47 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens ─────────────────────────────────────── */
 :root {
-  /* Warm neutrals */
-  --bg:          #F7F3EE;
-  --surface:     #FFFFFF;
-  --surface-2:   #F0EAE0;
-  --surface-3:   #E8DFD0;
+  --bg: #070b1f;
+  --surface: rgba(14, 21, 52, 0.78);
+  --surface-2: rgba(23, 34, 84, 0.76);
+  --surface-3: rgba(38, 53, 118, 0.68);
 
-  /* Borders */
-  --border:      #E0D6C8;
-  --border-2:    #C9BBA9;
+  --border: rgba(129, 150, 255, 0.35);
+  --border-2: rgba(121, 250, 255, 0.55);
 
-  /* Text */
-  --text:        #1C1612;
-  --text-2:      #6B5B4A;
-  --text-3:      #A8937A;
+  --text: #f3f6ff;
+  --text-2: #c8d4ff;
+  --text-3: #8ea3ec;
 
-  /* Accent — amber/ochre */
-  --accent:         #C2700A;
-  --accent-dark:    #92520A;
-  --accent-light:   #FEF3E2;
-  --accent-border:  #F6C27A;
+  --accent: #6d5cff;
+  --accent-dark: #5645e6;
+  --accent-light: rgba(109, 92, 255, 0.18);
+  --accent-border: rgba(139, 124, 255, 0.55);
 
-  /* Status */
-  --s-active-color:  #4F46E5; --s-active-bg:   #EEEDFD; --s-active-border: #C4C2F7;
-  --s-deploy-color:  #B45309; --s-deploy-bg:   #FEF3E2; --s-deploy-border: #F6C27A;
-  --s-done-color:    #15803D; --s-done-bg:     #ECFDF5; --s-done-border:   #86EFAC;
-  --s-blocked-color: #DC2626; --s-blocked-bg:  #FEF2F2; --s-blocked-border:#FCA5A5;
-  --s-frame-color:   #78716C; --s-frame-bg:    #F5F0EA; --s-frame-border:  #D6CFC7;
+  --header: rgba(8, 12, 32, 0.9);
+  --header-border: rgba(108, 128, 255, 0.38);
 
-  /* Header */
-  --header:      #1C1612;
-  --header-border: #2D2420;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
 
-  /* Typography */
-  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono:    'DM Mono', 'Courier New', monospace;
-
-  /* Shadows — warm tint */
-  --shadow-xs: 0 1px 2px rgba(28, 22, 18, 0.05);
-  --shadow-sm: 0 1px 4px rgba(28, 22, 18, 0.08), 0 1px 2px rgba(28, 22, 18, 0.04);
-  --shadow-md: 0 4px 12px rgba(28, 22, 18, 0.09), 0 2px 4px rgba(28, 22, 18, 0.05);
-  --shadow-lg: 0 12px 32px rgba(28, 22, 18, 0.12), 0 4px 8px rgba(28, 22, 18, 0.06);
+  --shadow-xs: 0 2px 10px rgba(3, 7, 26, 0.35);
+  --shadow-sm: 0 10px 30px rgba(3, 7, 26, 0.45);
+  --shadow-md: 0 18px 45px rgba(3, 7, 26, 0.52);
+  --shadow-lg: 0 28px 70px rgba(3, 7, 26, 0.62);
 }
 
-/* ─── Reset ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 html { scroll-behavior: smooth; }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 15% 20%, rgba(56, 189, 248, 0.22), transparent 28%),
+    radial-gradient(circle at 85% 10%, rgba(192, 132, 252, 0.28), transparent 34%),
+    radial-gradient(circle at 20% 90%, rgba(34, 197, 94, 0.2), transparent 26%),
+    radial-gradient(circle at 80% 80%, rgba(236, 72, 153, 0.22), transparent 30%),
+    linear-gradient(135deg, #06091a 0%, #0a1031 55%, #070b1f 100%);
+  background-attachment: fixed;
   color: var(--text);
   font-family: var(--font-body);
   font-size: 14px;
@@ -65,55 +54,58 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
 }
 
-/* Warm noise texture on background */
 body::before {
   content: '';
   position: fixed;
-  inset: 0;
+  inset: -30%;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.018;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 128px;
+  opacity: 0.22;
+  background:
+    conic-gradient(from 90deg, rgba(129, 140, 248, 0.2), rgba(56, 189, 248, 0.16), rgba(236, 72, 153, 0.16), rgba(34, 197, 94, 0.16), rgba(129, 140, 248, 0.2));
+  filter: blur(90px);
+  animation: drift 18s linear infinite;
 }
 
 main, header, aside, section, article { position: relative; z-index: 1; }
+::selection { background: #7c6dff66; color: var(--text); }
 
-::selection { background: #C2700A22; color: var(--text); }
-
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: rgba(148, 163, 255, 0.45); border-radius: 999px; }
 
 input, textarea, select, button { font-family: var(--font-body); }
 button { cursor: pointer; }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #7bf9ff;
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 4px;
 }
 
-/* ─── Animations ────────────────────────────────────────── */
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes drift {
+  0% { transform: rotate(0deg) scale(1); }
+  50% { transform: rotate(180deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
 }
 
 .slide-up { animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .fade-in  { animation: fadeIn  0.22s ease both; }
-
-/* ─── Utility ───────────────────────────────────────────── */
 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
 .mono    { font-family: var(--font-mono); }
 .caps    { text-transform: uppercase; letter-spacing: 0.08em; }
 
-/* ─── Print ─────────────────────────────────────────────── */
+.glass-panel {
+  background: linear-gradient(160deg, rgba(20, 30, 74, 0.86), rgba(8, 13, 35, 0.82));
+  border: 1px solid var(--border);
+  backdrop-filter: blur(14px);
+}
+
 @media print {
   @page { size: A4; margin: 14mm 12mm; }
   body { background: white !important; }

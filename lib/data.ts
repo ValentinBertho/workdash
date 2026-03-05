@@ -3,9 +3,9 @@ import path from 'path';
 import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint } from '@/types';
 
 // File-based storage (falls back to in-memory when filesystem is read-only, e.g. Vercel)
-const DATA_DIR = process.env.VERCEL
-  ? '/tmp/workdash-data'
-  : path.join(process.cwd(), '.data');
+// You can force a persistent folder with WORKDASH_DATA_DIR.
+const DATA_DIR = process.env.WORKDASH_DATA_DIR
+  ?? (process.env.VERCEL ? '/tmp/workdash-data' : path.join(process.cwd(), '.data'));
 const memoryStore = new Map<string, unknown>();
 
 function canUseFileStorage(): boolean {
@@ -23,10 +23,26 @@ function readFile<T>(filename: string, fallback: T): T {
   }
 
   const file = path.join(DATA_DIR, filename);
+  const backup = `${file}.bak`;
   try {
-    if (!fs.existsSync(file)) return fallback;
+    if (!fs.existsSync(file)) {
+      if (fs.existsSync(backup)) {
+        return JSON.parse(fs.readFileSync(backup, 'utf-8')) as T;
+      }
+      return fallback;
+    }
     return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
-  } catch { return fallback; }
+  } catch {
+    // Corrupted write safety net: recover from previous good snapshot.
+    try {
+      if (fs.existsSync(backup)) {
+        return JSON.parse(fs.readFileSync(backup, 'utf-8')) as T;
+      }
+    } catch {
+      // noop
+    }
+    return fallback;
+  }
 }
 
 function writeFile(filename: string, data: unknown): void {
@@ -36,9 +52,20 @@ function writeFile(filename: string, data: unknown): void {
   }
 
   const file = path.join(DATA_DIR, filename);
+  const backup = `${file}.bak`;
+  const temp = `${file}.tmp`;
   try {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+    // Keep last successful snapshot.
+    if (fs.existsSync(file)) fs.copyFileSync(file, backup);
+    // Atomic replace to avoid partial/corrupted files on crash.
+    fs.writeFileSync(temp, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(temp, file);
   } catch {
+    try {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    } catch {
+      // noop
+    }
     memoryStore.set(filename, data);
   }
 }

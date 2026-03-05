@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { DashboardData, Project, Task, Comment, Status } from '@/types';
 
 const STATUS_OPTIONS: Status[] = ['en-cours', 'a-deployer', 'ok', 'bloque', 'a-cadrer'];
@@ -23,6 +23,7 @@ export default function AdminPage() {
   const [comments, setComments] = useState<Comment[]>([]);
   const [saving, setSaving]     = useState(false);
   const [saved, setSaved]       = useState(false);
+  const [saveErr, setSaveErr]   = useState('');
   const [unsaved, setUnsaved]   = useState(false);
   const [tab, setTab]           = useState<'projects'|'todos'|'comments'>('projects');
   const [expandedId, setExpandedId] = useState<string|null>(null);
@@ -30,6 +31,7 @@ export default function AdminPage() {
   const [newTodo, setNewTodo]   = useState('');
   const [showAdd, setShowAdd]   = useState(false);
   const [form, setForm]         = useState({...EMPTY});
+  const autoSaveTimer           = useRef<ReturnType<typeof setTimeout>|null>(null);
 
   const load = useCallback(async () => {
     const [d, c] = await Promise.all([
@@ -46,12 +48,41 @@ export default function AdminPage() {
   };
   const logout = async () => { await fetch('/api/auth',{method:'DELETE'}); setAuthed(false); setData(null); };
 
-  const save = async () => {
-    if (!data) return; setSaving(true);
-    await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    setSaving(false); setSaved(true); setUnsaved(false);
-    setTimeout(()=>setSaved(false), 2500);
-  };
+  const save = useCallback(async () => {
+    if (!data || saving) return;
+    setSaving(true);
+    setSaveErr('');
+    try {
+      const r = await fetch('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+      if (!r.ok) throw new Error('Erreur de sauvegarde');
+      setSaved(true);
+      setUnsaved(false);
+      setTimeout(()=>setSaved(false), 2500);
+    } catch {
+      setSaveErr('Sauvegarde impossible. Réessaie dans quelques secondes.');
+    } finally {
+      setSaving(false);
+    }
+  }, [data, saving]);
+
+  useEffect(() => {
+    if (!authed || !data || !unsaved || saving) return;
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    autoSaveTimer.current = setTimeout(() => { void save(); }, 1200);
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
+    };
+  }, [authed, data, unsaved, saving, save]);
+
+  useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!unsaved) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [unsaved]);
 
   const upProject = (id: string, updates: Partial<Project>) => {
     if (!data) return;
@@ -132,14 +163,14 @@ export default function AdminPage() {
   /* ── Login ── */
   if (!authed) return (
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--header)'}}>
-      <div style={{background:'#251E19',border:'1px solid #3D3128',borderRadius:14,padding:'48px 44px',width:400,textAlign:'center',boxShadow:'0 32px 64px rgba(0,0,0,0.4)'}}>
+      <div style={{background:'#1A214D',border:'1px solid #39437F',borderRadius:14,padding:'48px 44px',width:400,textAlign:'center',boxShadow:'0 32px 64px rgba(0,0,0,0.4)'}}>
         <div style={{width:48,height:48,background:'var(--accent-light)',border:'1px solid var(--accent-border)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px'}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
         </div>
-        <p style={{fontWeight:700,fontSize:'1.3rem',color:'#F5EDE0',letterSpacing:'-0.02em',marginBottom:5}}>Console Admin</p>
-        <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#4A3A2E',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:32}}>WorkDash · Valentin</p>
+        <p style={{fontWeight:700,fontSize:'1.3rem',color:'#EEF2FF',letterSpacing:'-0.02em',marginBottom:5}}>Console Admin</p>
+        <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#A7B6FF',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:32}}>WorkDash · Valentin</p>
         <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()} placeholder="Mot de passe"
-          style={{width:'100%',fontSize:'0.87rem',background:'rgba(255,255,255,0.05)',border:`1px solid ${loginErr?'#DC2626':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'11px 14px',color:'#F5EDE0',outline:'none',marginBottom:10,caretColor:'var(--accent)'}} />
+          style={{width:'100%',fontSize:'0.87rem',background:'rgba(255,255,255,0.16)',border:`1px solid ${loginErr?'#DC2626':'rgba(255,255,255,0.1)'}`,borderRadius:8,padding:'11px 14px',color:'#EEF2FF',outline:'none',marginBottom:10,caretColor:'var(--accent)'}} />
         {loginErr&&<p style={{color:'#F87171',fontSize:'0.76rem',marginBottom:12,fontWeight:500}}>{loginErr}</p>}
         <button onClick={login} style={{width:'100%',fontWeight:600,fontSize:'0.87rem',background:'var(--accent)',border:'none',borderRadius:8,padding:'12px',color:'white',cursor:'pointer'}}
           onMouseOver={e=>(e.currentTarget.style.background='var(--accent-dark)')} onMouseOut={e=>(e.currentTarget.style.background='var(--accent)')}>
@@ -159,34 +190,35 @@ export default function AdminPage() {
 
   /* ── Admin UI ── */
   return (
-    <div style={{minHeight:'100vh',background:'var(--bg)'}}>
+    <div style={{minHeight:'100vh',background:'transparent'}}>
 
       {/* Header */}
-      <header style={{background:'var(--header)',borderBottom:'1px solid var(--header-border)',position:'sticky',top:0,zIndex:50}}>
+      <header style={{background:'var(--header)',backdropFilter:'blur(10px)',borderBottom:'1px solid var(--header-border)',position:'sticky',top:0,zIndex:50,boxShadow:'0 10px 30px rgba(0,0,0,0.25)'}}>
         <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'var(--accent)'}} />
         <div style={{maxWidth:1280,margin:'0 auto',padding:'0 32px',display:'flex',alignItems:'center',justifyContent:'space-between',height:60}}>
           <div style={{display:'flex',alignItems:'center',gap:16}}>
             <div style={{display:'flex',alignItems:'center',gap:10}}>
               <div style={{width:7,height:28,background:'var(--accent)',borderRadius:2}} />
               <div>
-                <p style={{fontWeight:800,fontSize:'0.88rem',color:'#F5EDE0',letterSpacing:'-0.02em',lineHeight:1.15}}>Console Admin</p>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:'0.54rem',color:'#4A3A2E',letterSpacing:'0.08em'}}>WorkDash · MISMO</p>
+                <p style={{fontWeight:800,fontSize:'0.88rem',color:'#EEF2FF',letterSpacing:'-0.02em',lineHeight:1.15}}>Console Admin</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:'0.54rem',color:'#A7B6FF',letterSpacing:'0.08em'}}>WorkDash · MISMO</p>
               </div>
             </div>
-            <span style={{width:1,height:18,background:'#2D2420'}} />
+            <span style={{width:1,height:18,background:'#2D366E'}} />
             {unsaved&&<span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#B45309',letterSpacing:'0.04em'}}>● Modifications non sauvegardées</span>}
             {saved&&<span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#15803D',letterSpacing:'0.04em'}}>✓ Sauvegardé</span>}
+            {saveErr&&<span style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#DC2626',letterSpacing:'0.03em'}}>{saveErr}</span>}
           </div>
 
           <div style={{display:'flex',alignItems:'center',gap:8}}>
             <button onClick={save} disabled={saving||!unsaved}
-              style={{fontSize:'0.76rem',fontWeight:600,background:(unsaved&&!saving)?'var(--accent)':'rgba(255,255,255,0.05)',border:`1px solid ${(unsaved&&!saving)?'transparent':'rgba(255,255,255,0.08)'}`,borderRadius:7,padding:'7px 16px',color:(unsaved&&!saving)?'white':'#4A3A2E',cursor:(unsaved&&!saving)?'pointer':'not-allowed',transition:'all 0.2s'}}>
+              style={{fontSize:'0.76rem',fontWeight:600,background:(unsaved&&!saving)?'var(--accent)':'rgba(255,255,255,0.16)',border:`1px solid ${(unsaved&&!saving)?'transparent':'rgba(255,255,255,0.16)'}`,borderRadius:7,padding:'7px 16px',color:(unsaved&&!saving)?'white':'#7C8ACF',cursor:(unsaved&&!saving)?'pointer':'not-allowed',transition:'all 0.2s'}}>
               {saving?'Sauvegarde…':'Sauvegarder'}
             </button>
-            <a href="/" target="_blank" style={{fontSize:'0.76rem',fontWeight:500,border:'1px solid rgba(255,255,255,0.08)',borderRadius:7,padding:'7px 14px',color:'#6B5A4A',textDecoration:'none',display:'inline-block'}}>
+            <a href="/" target="_blank" style={{fontSize:'0.76rem',fontWeight:500,border:'1px solid rgba(255,255,255,0.16)',borderRadius:7,padding:'7px 14px',color:'#D6DEFF',textDecoration:'none',display:'inline-block'}}>
               Dashboard ↗
             </a>
-            <button onClick={logout} style={{fontSize:'0.76rem',fontWeight:500,background:'none',border:'1px solid rgba(255,255,255,0.06)',borderRadius:7,padding:'7px 12px',color:'#4A3A2E',cursor:'pointer'}}>Déconnexion</button>
+            <button onClick={logout} style={{fontSize:'0.76rem',fontWeight:500,background:'none',border:'1px solid rgba(255,255,255,0.10)',borderRadius:7,padding:'7px 12px',color:'#A7B6FF',cursor:'pointer'}}>Déconnexion</button>
           </div>
         </div>
       </header>
@@ -220,7 +252,7 @@ export default function AdminPage() {
 
             {/* Add form */}
             {showAdd&&(
-              <div style={{background:'var(--surface)',border:'1px solid var(--border)',borderRadius:12,padding:'24px',marginBottom:16,boxShadow:'var(--shadow-sm)'}} className="slide-up">
+              <div style={{background:'linear-gradient(165deg, rgba(20,30,74,0.82), rgba(8,13,35,0.8))',border:'1px solid var(--border)',borderRadius:12,padding:'24px',marginBottom:16,boxShadow:'var(--shadow-sm)'}} className="slide-up">
                 <p style={{fontSize:'0.72rem',fontWeight:700,color:'var(--accent)',textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:18}}>Nouveau projet</p>
                 <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
                   <div><FL>Nom *</FL><FI value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="Ex: Interface CHORUS" /></div>
@@ -260,7 +292,7 @@ export default function AdminPage() {
                 const pDone = p.tasks.filter(t=>t.done).length;
                 const pCol = p.progress>=70?'#15803D':p.progress>=40?'#B45309':'#DC2626';
                 return (
-                  <div key={p.id} style={{background:'var(--surface)',border:`1px solid ${isExp?sm.color+'55':'var(--border)'}`,borderRadius:10,overflow:'hidden',boxShadow:isExp?`var(--shadow-sm),0 0 0 3px ${sm.color}10`:'var(--shadow-xs)',transition:'all 0.2s'}}>
+                  <div key={p.id} style={{background:'linear-gradient(165deg, rgba(20,30,74,0.82), rgba(8,13,35,0.8))',border:`1px solid ${isExp?sm.color+'55':'var(--border)'}`,borderRadius:10,overflow:'hidden',boxShadow:isExp?`var(--shadow-sm),0 0 0 3px ${sm.color}10`:'var(--shadow-xs)',transition:'all 0.2s'}}>
                     {/* Status stripe */}
                     <div style={{height:3,background:sm.color,opacity:0.8}} />
 
@@ -335,7 +367,7 @@ export default function AdminPage() {
                         <FL>Tâches — {pDone}/{p.tasks.length} complétées</FL>
                         <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:10}}>
                           {p.tasks.map(t=>(
-                            <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,background:'var(--surface)',border:`1px solid ${t.done?'#86EFAC':'var(--border)'}`,borderRadius:7,padding:'8px 12px',transition:'border-color 0.15s'}}>
+                            <div key={t.id} style={{display:'flex',alignItems:'center',gap:10,background:'linear-gradient(165deg, rgba(20,30,74,0.82), rgba(8,13,35,0.8))',border:`1px solid ${t.done?'#86EFAC':'var(--border)'}`,borderRadius:7,padding:'8px 12px',transition:'border-color 0.15s'}}>
                               <input type="checkbox" checked={t.done} onChange={()=>toggleTask(p.id,t.id)} style={{accentColor:'#15803D',width:15,height:15,cursor:'pointer'}} />
                               <span style={{flex:1,fontSize:'0.8rem',textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-3)':'var(--text-2)',fontWeight:t.done?400:500}}>{t.label}</span>
                               <button onClick={()=>removeTask(p.id,t.id)} style={{background:'none',border:'none',color:'var(--text-3)',cursor:'pointer',fontSize:'0.8rem',opacity:0.4,padding:'0 4px'}}>×</button>
@@ -361,7 +393,7 @@ export default function AdminPage() {
           <div style={{maxWidth:640}}>
             <div style={{display:'flex',flexDirection:'column',gap:5,marginBottom:12}}>
               {data.weeklyTodos.map(t=>(
-                <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,background:'var(--surface)',border:`1px solid ${t.done?'#86EFAC':'var(--border)'}`,borderRadius:9,padding:'11px 14px',transition:'border-color 0.15s'}}>
+                <div key={t.id} style={{display:'flex',alignItems:'center',gap:12,background:'linear-gradient(165deg, rgba(20,30,74,0.82), rgba(8,13,35,0.8))',border:`1px solid ${t.done?'#86EFAC':'var(--border)'}`,borderRadius:9,padding:'11px 14px',transition:'border-color 0.15s'}}>
                   <input type="checkbox" checked={t.done} onChange={()=>toggleTodo(t.id)} style={{accentColor:'#15803D',width:16,height:16,cursor:'pointer'}} />
                   <span style={{flex:1,fontSize:'0.85rem',fontWeight:t.done?400:500,textDecoration:t.done?'line-through':'none',color:t.done?'var(--text-3)':'var(--text)'}}>{t.label}</span>
                   <button onClick={()=>removeTodo(t.id)} style={{background:'none',border:'none',color:'var(--text-3)',cursor:'pointer',fontSize:'0.78rem',opacity:0.4,padding:'0 4px'}}>×</button>
@@ -389,7 +421,7 @@ export default function AdminPage() {
                 const isM = c.author==='manager';
                 const isDecision = c.projectId?.startsWith('decision:');
                 return (
-                  <div key={c.id} style={{display:'flex',gap:14,background:'var(--surface)',border:`1px solid ${isM?'#C4C2F7':'#86EFAC'}`,borderRadius:10,padding:'14px 16px',alignItems:'flex-start',boxShadow:'var(--shadow-xs)'}}>
+                  <div key={c.id} style={{display:'flex',gap:14,background:'linear-gradient(165deg, rgba(20,30,74,0.82), rgba(8,13,35,0.8))',border:`1px solid ${isM?'#C4C2F7':'#86EFAC'}`,borderRadius:10,padding:'14px 16px',alignItems:'flex-start',boxShadow:'var(--shadow-xs)'}}>
                     <div style={{width:34,height:34,borderRadius:9,flexShrink:0,background:isM?'#EEEDFD':'#ECFDF5',border:`1px solid ${isM?'#C4C2F7':'#86EFAC'}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'0.75rem',fontWeight:700,color:isM?'#4F46E5':'#15803D'}}>
                       {isM?'M':'V'}
                     </div>

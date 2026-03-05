@@ -46,8 +46,11 @@ function pgColor(p: number) {
 
 /* ─── Design primitives ─────────────────────────────────── */
 const card: React.CSSProperties = {
-  background: 'var(--surface)', border: '1px solid var(--border)',
-  borderRadius: 12, boxShadow: 'var(--shadow-xs)',
+  background: 'linear-gradient(160deg, rgba(20,30,74,0.82), rgba(8,13,35,0.8))',
+  border: '1px solid var(--border)',
+  borderRadius: 16,
+  boxShadow: 'var(--shadow-sm)',
+  backdropFilter: 'blur(12px)',
 };
 
 /* ─── Page ──────────────────────────────────────────────── */
@@ -91,7 +94,6 @@ export default function Page() {
 
   useEffect(() => {
     if (!meeting) { if (timerRef.current) clearInterval(timerRef.current); return; }
-    setMeetTimer(0);
     timerRef.current = setInterval(() => setMeetTimer(t=>t+1), 1000);
     const onKey = (e: KeyboardEvent) => {
       if (e.key==='Escape') setMeeting(false);
@@ -139,24 +141,24 @@ export default function Page() {
     <div style={{minHeight:'100vh',display:'flex',alignItems:'center',justifyContent:'center',background:'var(--header)'}}>
       {/* Warm grain on login bg */}
       <div style={{position:'fixed',inset:0,backgroundImage:'radial-gradient(ellipse at 30% 20%, rgba(194,112,10,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(79,70,229,0.06) 0%, transparent 60%)'}} />
-      <div style={{...card,position:'relative',padding:'48px 44px',width:400,textAlign:'center',background:'#251E19',border:'1px solid #3D3128',boxShadow:'0 32px 64px rgba(0,0,0,0.4)'}}>
+      <div style={{...card,position:'relative',padding:'48px 44px',width:400,textAlign:'center',background:'#1A214D',border:'1px solid #39437F',boxShadow:'0 32px 64px rgba(0,0,0,0.4)'}}>
         <div style={{width:48,height:48,background:'var(--accent-light)',border:'1px solid var(--accent-border)',borderRadius:12,display:'flex',alignItems:'center',justifyContent:'center',margin:'0 auto 24px'}}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
           </svg>
         </div>
-        <p style={{fontWeight:700,fontSize:'1.35rem',color:'#F5EDE0',letterSpacing:'-0.02em',marginBottom:6}}>Espace Manager</p>
-        <p style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#6B5A4A',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:32}}>WorkDash · MISMO</p>
+        <p style={{fontWeight:700,fontSize:'1.35rem',color:'#EEF2FF',letterSpacing:'-0.02em',marginBottom:6}}>Espace Manager</p>
+        <p style={{fontFamily:'var(--font-mono)',fontSize:'0.6rem',color:'#B8C3FF',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:32}}>WorkDash · MISMO</p>
         <input type="password" value={loginPwd} onChange={e=>setLoginPwd(e.target.value)} onKeyDown={e=>e.key==='Enter'&&login()}
           placeholder="Mot de passe"
-          style={{width:'100%',fontSize:'0.88rem',background:'rgba(255,255,255,0.06)',border:`1px solid ${loginErr?'#DC2626':'rgba(255,255,255,0.12)'}`,borderRadius:8,padding:'11px 14px',color:'#F5EDE0',outline:'none',marginBottom:10,caretColor:'var(--accent)'}} />
+          style={{width:'100%',fontSize:'0.88rem',background:'rgba(255,255,255,0.10)',border:`1px solid ${loginErr?'#DC2626':'rgba(255,255,255,0.20)'}`,borderRadius:8,padding:'11px 14px',color:'#EEF2FF',outline:'none',marginBottom:10,caretColor:'var(--accent)'}} />
         {loginErr && <p style={{color:'#F87171',fontSize:'0.78rem',marginBottom:12,fontWeight:500}}>{loginErr}</p>}
         <button onClick={login}
           style={{width:'100%',fontWeight:600,fontSize:'0.88rem',background:'var(--accent)',border:'none',borderRadius:8,padding:'12px',color:'white',cursor:'pointer',letterSpacing:'0.01em'}}
           onMouseOver={e=>(e.currentTarget.style.background='var(--accent-dark)')} onMouseOut={e=>(e.currentTarget.style.background='var(--accent)')}>
           Accéder au dashboard
         </button>
-        <p style={{marginTop:28,fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#3D3128'}}>Accès restreint · MISMO</p>
+        <p style={{marginTop:28,fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#39437F'}}>Accès restreint · MISMO</p>
       </div>
     </div>
   );
@@ -193,42 +195,42 @@ export default function Page() {
     if (!mp) { setMeeting(false); return null; }
     const ms = STATUS[mp.status];
     return (
-      <div style={{position:'fixed',inset:0,background:'#140F0B',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',zIndex:9999,padding:48}}>
+      <div style={{position:'fixed',inset:0,background:'#0F1433',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',zIndex:9999,padding:48}}>
         <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'var(--accent)'}} />
         <div style={{position:'absolute',top:24,left:40,right:40,display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <span style={{fontFamily:'var(--font-mono)',fontSize:'0.85rem',color:'#4A3A2E',letterSpacing:'0.06em'}}>{fmtTimer(meetTimer)}</span>
-          <span style={{fontSize:'0.72rem',color:'#4A3A2E',fontWeight:500}}>Réunion · {meetIdx+1}/{sorted.length}</span>
-          <button onClick={()=>setMeeting(false)} style={{fontSize:'0.72rem',fontWeight:600,background:'rgba(255,255,255,0.05)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'5px 12px',color:'#6B5A4A',cursor:'pointer'}}>Quitter (ESC)</button>
+          <span style={{fontFamily:'var(--font-mono)',fontSize:'0.85rem',color:'#7C8ACF',letterSpacing:'0.06em'}}>{fmtTimer(meetTimer)}</span>
+          <span style={{fontSize:'0.72rem',color:'#7C8ACF',fontWeight:500}}>Réunion · {meetIdx+1}/{sorted.length}</span>
+          <button onClick={()=>setMeeting(false)} style={{fontSize:'0.72rem',fontWeight:600,background:'rgba(255,255,255,0.16)',border:'1px solid rgba(255,255,255,0.16)',borderRadius:6,padding:'5px 12px',color:'#B8C3FF',cursor:'pointer'}}>Quitter (ESC)</button>
         </div>
-        <div style={{background:'#1E1812',border:'1px solid #3D3128',borderRadius:16,padding:'44px 52px',maxWidth:760,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,0.5)'}}>
+        <div style={{background:'#171D44',border:'1px solid #39437F',borderRadius:16,padding:'44px 52px',maxWidth:760,width:'100%',boxShadow:'0 32px 64px rgba(0,0,0,0.5)'}}>
           <div style={{display:'flex',alignItems:'center',gap:14,marginBottom:32}}>
             <div style={{width:10,height:10,borderRadius:'50%',background:ms.color,flexShrink:0}} />
-            <h2 style={{fontSize:'1.9rem',fontWeight:800,color:'#F5EDE0',letterSpacing:'-0.025em',flex:1}}>{mp.name}</h2>
+            <h2 style={{fontSize:'1.9rem',fontWeight:800,color:'#EEF2FF',letterSpacing:'-0.025em',flex:1}}>{mp.name}</h2>
             <span style={{fontSize:'0.7rem',fontWeight:600,padding:'4px 12px',borderRadius:99,background:ms.bg,color:ms.color,border:`1px solid ${ms.border}`}}>{ms.label}</span>
           </div>
           <div style={{marginBottom:36}}>
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'baseline',marginBottom:12}}>
-              <span style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',color:'#4A3A2E',textTransform:'uppercase',letterSpacing:'0.1em'}}>Avancement</span>
+              <span style={{fontFamily:'var(--font-mono)',fontSize:'0.62rem',color:'#7C8ACF',textTransform:'uppercase',letterSpacing:'0.1em'}}>Avancement</span>
               <span style={{fontSize:'3rem',fontWeight:800,color:pgColor(mp.progress),letterSpacing:'-0.04em',fontVariantNumeric:'tabular-nums'}}>{mp.progress}<span style={{fontSize:'1.2rem'}}>%</span></span>
             </div>
-            <div style={{height:6,background:'#2D2420',borderRadius:99,overflow:'hidden'}}>
+            <div style={{height:6,background:'#2D366E',borderRadius:99,overflow:'hidden'}}>
               <div style={{height:'100%',width:`${mp.progress}%`,borderRadius:99,background:pgColor(mp.progress),transition:'width 0.6s cubic-bezier(0.16,1,0.3,1)'}} />
             </div>
           </div>
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
-            <div style={{background:'rgba(255,255,255,0.03)',borderRadius:10,padding:'16px 18px',border:'1px solid rgba(255,255,255,0.06)'}}>
-              <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#4A3A2E',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:8}}>En ce moment</p>
+            <div style={{background:'rgba(255,255,255,0.03)',borderRadius:10,padding:'16px 18px',border:'1px solid rgba(255,255,255,0.10)'}}>
+              <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#7C8ACF',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:8}}>En ce moment</p>
               <p style={{fontSize:'0.88rem',color:'#C4B09A',lineHeight:1.6}}>{mp.currentAction}</p>
             </div>
             <div style={{background:`${ms.color}12`,borderRadius:10,padding:'16px 18px',border:`1px solid ${ms.color}30`}}>
               <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:ms.color,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:8,opacity:0.8}}>Prochaine étape</p>
-              <p style={{fontSize:'0.88rem',color:'#F5EDE0',lineHeight:1.6,fontWeight:500}}>→ {mp.nextStep}</p>
+              <p style={{fontSize:'0.88rem',color:'#EEF2FF',lineHeight:1.6,fontWeight:500}}>→ {mp.nextStep}</p>
             </div>
           </div>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:24,marginTop:40}}>
           <button onClick={()=>setMeetIdx(i=>Math.max(i-1,0))} disabled={meetIdx===0}
-            style={{fontSize:'0.78rem',fontWeight:600,background:meetIdx===0?'transparent':'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:8,padding:'9px 22px',color:meetIdx===0?'#2D2420':'#8A7060',cursor:meetIdx===0?'not-allowed':'pointer'}}>
+            style={{fontSize:'0.78rem',fontWeight:600,background:meetIdx===0?'transparent':'rgba(255,255,255,0.10)',border:'1px solid rgba(255,255,255,0.16)',borderRadius:8,padding:'9px 22px',color:meetIdx===0?'#2D366E':'#8A7060',cursor:meetIdx===0?'not-allowed':'pointer'}}>
             ← Précédent
           </button>
           <div style={{display:'flex',gap:5}}>
@@ -237,21 +239,22 @@ export default function Page() {
             ))}
           </div>
           <button onClick={()=>setMeetIdx(i=>Math.min(i+1,sorted.length-1))} disabled={meetIdx===sorted.length-1}
-            style={{fontSize:'0.78rem',fontWeight:600,background:meetIdx===sorted.length-1?'transparent':'rgba(255,255,255,0.06)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:8,padding:'9px 22px',color:meetIdx===sorted.length-1?'#2D2420':'#8A7060',cursor:meetIdx===sorted.length-1?'not-allowed':'pointer'}}>
+            style={{fontSize:'0.78rem',fontWeight:600,background:meetIdx===sorted.length-1?'transparent':'rgba(255,255,255,0.10)',border:'1px solid rgba(255,255,255,0.16)',borderRadius:8,padding:'9px 22px',color:meetIdx===sorted.length-1?'#2D366E':'#8A7060',cursor:meetIdx===sorted.length-1?'not-allowed':'pointer'}}>
             Suivant →
           </button>
         </div>
-        <p style={{marginTop:14,fontFamily:'var(--font-mono)',fontSize:'0.56rem',color:'#2D2420'}}>← → naviguer · ESC quitter</p>
+        <p style={{marginTop:14,fontFamily:'var(--font-mono)',fontSize:'0.56rem',color:'#2D366E'}}>← → naviguer · ESC quitter</p>
       </div>
     );
   }
 
   /* ── Dashboard ── */
   return (
-    <div style={{minHeight:'100vh',background:'var(--bg)'}} id="print-root">
+    <div style={{minHeight:'100vh',background:'transparent'}} id="print-root">
+      <div style={{position:'fixed',inset:0,pointerEvents:'none',background:'radial-gradient(circle at 30% 20%, rgba(123,249,255,0.08), transparent 40%), radial-gradient(circle at 70% 70%, rgba(168,85,247,0.1), transparent 45%)'}} />
 
       {/* HEADER */}
-      <header className="no-print" style={{background:'var(--header)',borderBottom:'1px solid var(--header-border)',position:'sticky',top:0,zIndex:50}}>
+      <header className="no-print" style={{background:'var(--header)',backdropFilter:'blur(10px)',borderBottom:'1px solid var(--header-border)',position:'sticky',top:0,zIndex:50,boxShadow:'0 10px 30px rgba(0,0,0,0.25)'}}>
         <div style={{position:'absolute',top:0,left:0,right:0,height:2,background:'var(--accent)'}} />
         <div style={{maxWidth:1440,margin:'0 auto',padding:'0 32px',display:'flex',alignItems:'center',justifyContent:'space-between',height:60}}>
           {/* Logo */}
@@ -259,29 +262,29 @@ export default function Page() {
             <div style={{display:'flex',alignItems:'center',gap:10}}>
               <div style={{width:7,height:28,background:'var(--accent)',borderRadius:2,flexShrink:0}} />
               <div>
-                <p style={{fontWeight:800,fontSize:'0.95rem',color:'#F5EDE0',letterSpacing:'-0.02em',lineHeight:1.15}}>WorkDash</p>
-                <p style={{fontFamily:'var(--font-mono)',fontSize:'0.55rem',color:'#4A3A2E',letterSpacing:'0.08em'}}>MISMO · MGR</p>
+                <p style={{fontWeight:800,fontSize:'0.95rem',color:'#EEF2FF',letterSpacing:'-0.02em',lineHeight:1.15}}>WorkDash</p>
+                <p style={{fontFamily:'var(--font-mono)',fontSize:'0.55rem',color:'#7C8ACF',letterSpacing:'0.08em'}}>MISMO · MGR</p>
               </div>
             </div>
           </div>
 
           {/* Center — week */}
           <div style={{display:'flex',alignItems:'center',gap:20}}>
-            <span style={{fontFamily:'var(--font-mono)',fontSize:'0.65rem',color:'#4A3A2E',letterSpacing:'0.06em'}}>
+            <span style={{fontFamily:'var(--font-mono)',fontSize:'0.65rem',color:'#7C8ACF',letterSpacing:'0.06em'}}>
               S{getWeek(now)} · {now.toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}
             </span>
-            <span style={{width:1,height:16,background:'#2D2420'}} />
-            <span style={{fontFamily:'var(--font-mono)',fontSize:'0.65rem',color:'#6B5A4A',letterSpacing:'0.04em'}}>Valentin Bertho</span>
+            <span style={{width:1,height:16,background:'#2D366E'}} />
+            <span style={{fontFamily:'var(--font-mono)',fontSize:'0.65rem',color:'#B8C3FF',letterSpacing:'0.04em'}}>Valentin Bertho</span>
           </div>
 
           {/* Actions */}
           <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <HdrBtn onClick={()=>{setMeetIdx(0);setMeeting(true);}}>Réunion</HdrBtn>
+            <HdrBtn onClick={()=>{setMeetIdx(0);setMeetTimer(0);setMeeting(true);}}>Réunion</HdrBtn>
             <HdrBtn onClick={()=>window.print()}>PDF</HdrBtn>
             <HdrLink href="/admin">Admin</HdrLink>
             <button onClick={logout} title="Déconnexion"
-              style={{width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',background:'none',border:'1px solid rgba(255,255,255,0.06)',borderRadius:6,cursor:'pointer',color:'#4A3A2E'}}
-              onMouseOver={e=>(e.currentTarget.style.borderColor='rgba(255,255,255,0.15)')} onMouseOut={e=>(e.currentTarget.style.borderColor='rgba(255,255,255,0.06)')}>
+              style={{width:30,height:30,display:'flex',alignItems:'center',justifyContent:'center',background:'none',border:'1px solid rgba(255,255,255,0.10)',borderRadius:6,cursor:'pointer',color:'#7C8ACF'}}
+              onMouseOver={e=>(e.currentTarget.style.borderColor='rgba(255,255,255,0.15)')} onMouseOut={e=>(e.currentTarget.style.borderColor='rgba(255,255,255,0.10)')}>
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             </button>
           </div>
@@ -300,7 +303,7 @@ export default function Page() {
             {label:'À décider',  value:`${openDec}`,               sub:'points ouverts',                color:openDec>0?'#B45309':'#15803D'},
           ] as const).map((k,i)=>(
             <div key={i} className="slide-up" style={{...card,animationDelay:`${i*0.05}s`,padding:'20px 22px',borderRadius:10,position:'relative',overflow:'hidden'}}>
-              <div style={{position:'absolute',top:0,left:0,width:3,height:'100%',background:k.color,opacity:0.6,borderRadius:'10px 0 0 10px'}} />
+              <div style={{position:'absolute',top:0,left:0,width:4,height:'100%',background:k.color,opacity:0.6,borderRadius:'10px 0 0 10px'}} />
               <p className="caps mono" style={{fontSize:'0.6rem',color:'var(--text-3)',marginBottom:10}}>{k.label}</p>
               <p style={{fontSize:'2.4rem',fontWeight:800,color:k.color,letterSpacing:'-0.04em',lineHeight:1,fontVariantNumeric:'tabular-nums'}}>{k.value}</p>
               <p style={{fontSize:'0.72rem',color:'var(--text-3)',marginTop:5,fontWeight:500}}>{k.sub}</p>
@@ -401,15 +404,15 @@ export default function Page() {
 /* ─── Header buttons ────────────────────────────────────── */
 function HdrBtn({onClick,children}:{onClick:()=>void;children:React.ReactNode}) {
   return (
-    <button onClick={onClick} style={{fontSize:'0.72rem',fontWeight:500,background:'none',border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'6px 12px',color:'#6B5A4A',cursor:'pointer',transition:'border-color 0.15s,color 0.15s'}}
+    <button onClick={onClick} style={{fontSize:'0.72rem',fontWeight:500,background:'none',border:'1px solid rgba(255,255,255,0.16)',borderRadius:6,padding:'6px 12px',color:'#B8C3FF',cursor:'pointer',transition:'border-color 0.15s,color 0.15s'}}
       onMouseOver={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.18)';e.currentTarget.style.color='#C4B09A';}}
-      onMouseOut={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.08)';e.currentTarget.style.color='#6B5A4A';}}>
+      onMouseOut={e=>{e.currentTarget.style.borderColor='rgba(255,255,255,0.16)';e.currentTarget.style.color='#B8C3FF';}}>
       {children}
     </button>
   );
 }
 function HdrLink({href,children}:{href:string;children:React.ReactNode}) {
-  return <a href={href} style={{fontSize:'0.72rem',fontWeight:500,border:'1px solid rgba(255,255,255,0.08)',borderRadius:6,padding:'6px 12px',color:'#6B5A4A',textDecoration:'none',display:'inline-block'}}>
+  return <a href={href} style={{fontSize:'0.72rem',fontWeight:500,border:'1px solid rgba(255,255,255,0.16)',borderRadius:6,padding:'6px 12px',color:'#B8C3FF',textDecoration:'none',display:'inline-block'}}>
     {children}
   </a>;
 }
