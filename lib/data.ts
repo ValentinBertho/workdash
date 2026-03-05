@@ -2,15 +2,26 @@ import fs from 'fs';
 import path from 'path';
 import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint } from '@/types';
 
-// File-based persistent storage — survives restarts, no external service needed
-const DATA_DIR = path.join(process.cwd(), '.data');
+// File-based storage (falls back to in-memory when filesystem is read-only, e.g. Vercel)
+const DATA_DIR = process.env.VERCEL
+  ? '/tmp/workdash-data'
+  : path.join(process.cwd(), '.data');
+const memoryStore = new Map<string, unknown>();
 
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+function canUseFileStorage(): boolean {
+  try {
+    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function readFile<T>(filename: string, fallback: T): T {
-  ensureDir();
+  if (!canUseFileStorage()) {
+    return (memoryStore.get(filename) as T | undefined) ?? fallback;
+  }
+
   const file = path.join(DATA_DIR, filename);
   try {
     if (!fs.existsSync(file)) return fallback;
@@ -19,9 +30,17 @@ function readFile<T>(filename: string, fallback: T): T {
 }
 
 function writeFile(filename: string, data: unknown): void {
-  ensureDir();
+  if (!canUseFileStorage()) {
+    memoryStore.set(filename, data);
+    return;
+  }
+
   const file = path.join(DATA_DIR, filename);
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+  } catch {
+    memoryStore.set(filename, data);
+  }
 }
 
 const DEFAULT_DECISIONS: DecisionPoint[] = [
