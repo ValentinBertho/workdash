@@ -3,9 +3,9 @@ import path from 'path';
 import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint } from '@/types';
 
 // File-based storage (falls back to in-memory when filesystem is read-only, e.g. Vercel)
-const DATA_DIR = process.env.VERCEL
-  ? '/tmp/workdash-data'
-  : path.join(process.cwd(), '.data');
+// You can force a persistent folder with WORKDASH_DATA_DIR.
+const DATA_DIR = process.env.WORKDASH_DATA_DIR
+  ?? (process.env.VERCEL ? '/tmp/workdash-data' : path.join(process.cwd(), '.data'));
 const memoryStore = new Map<string, unknown>();
 
 function canUseFileStorage(): boolean {
@@ -23,10 +23,26 @@ function readFile<T>(filename: string, fallback: T): T {
   }
 
   const file = path.join(DATA_DIR, filename);
+  const backup = `${file}.bak`;
   try {
-    if (!fs.existsSync(file)) return fallback;
+    if (!fs.existsSync(file)) {
+      if (fs.existsSync(backup)) {
+        return JSON.parse(fs.readFileSync(backup, 'utf-8')) as T;
+      }
+      return fallback;
+    }
     return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
-  } catch { return fallback; }
+  } catch {
+    // Corrupted write safety net: recover from previous good snapshot.
+    try {
+      if (fs.existsSync(backup)) {
+        return JSON.parse(fs.readFileSync(backup, 'utf-8')) as T;
+      }
+    } catch {
+      // noop
+    }
+    return fallback;
+  }
 }
 
 function writeFile(filename: string, data: unknown): void {
@@ -36,130 +52,158 @@ function writeFile(filename: string, data: unknown): void {
   }
 
   const file = path.join(DATA_DIR, filename);
+  const backup = `${file}.bak`;
+  const temp = `${file}.tmp`;
   try {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf-8');
+    // Keep last successful snapshot.
+    if (fs.existsSync(file)) fs.copyFileSync(file, backup);
+    // Atomic replace to avoid partial/corrupted files on crash.
+    fs.writeFileSync(temp, JSON.stringify(data, null, 2), 'utf-8');
+    fs.renameSync(temp, file);
   } catch {
+    try {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    } catch {
+      // noop
+    }
     memoryStore.set(filename, data);
   }
 }
 
 const DEFAULT_DECISIONS: DecisionPoint[] = [
-  { id: 'dp1', text: "Brouillon mail via API GRAPH — confirmer l'implémentation ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
-  { id: 'dp2', text: "NDF : ajout analytique + suppression d'un frais — priorité et délai ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
-  { id: 'dp3', text: "Outil d'Audit : lancer CRON auto + réconciliation + paramétrage dynamique ?", status: 'open', createdAt: new Date('2026-03-01').toISOString() },
+  { id: 'dp1', text: 'SMART TECH évol : arbitrer les évolutions en attente de validation Nadir', status: 'open', createdAt: new Date('2026-03-01').toISOString() },
+  { id: 'dp2', text: 'BOOKINGS : confirmer la pertinence de maintenir le développement', status: 'open', createdAt: new Date('2026-03-01').toISOString() },
+  { id: 'dp3', text: 'SCAN IT : planifier validation AMOR + fenêtre de test global', status: 'open', createdAt: new Date('2026-03-01').toISOString() },
 ];
 
 /* ─── Dashboard data ─────────────────────────────────────────── */
 export const defaultData: DashboardData = {
   updatedAt: new Date().toISOString(),
   weeklyTodos: [
-    { id: 'w1', label: 'Envoyer API Sage analyse', done: true },
-    { id: 'w2', label: 'Brouillon GRAPH premier jet', done: true },
-    { id: 'w3', label: 'Continuer Add-in Outlook', done: true },
-    { id: 'w4', label: 'Générer version test CHORUS (PS)', done: true },
-    { id: 'w5', label: 'Relancer suivi ticket PXO', done: false },
-    { id: 'w6', label: 'Avancer RDV V2', done: false },
-    { id: 'w7', label: 'Préparer version Factur-X Terrena', done: false },
-    { id: 'w8', label: 'Installer FacturX nouveautés Terrena', done: false },
-    { id: 'w9', label: 'Avancer API SMART TECH V2', done: false },
+    { id: 'w1', label: 'Mes RDV V2 — Continuer développement ISO V1', done: false },
+    { id: 'w2', label: 'Mes RDV V2 — Ajouter fonctionnalités V2', done: false },
+    { id: 'w3', label: 'Add-in Outlook — Réaliser une V1 stable', done: false },
+    { id: 'w4', label: 'TX2 — Traiter le retour de test de Théry', done: false },
+    { id: 'w5', label: 'Refonte SMART-TECH API vers BDD ATHENEO', done: false },
+    { id: 'w6', label: 'Refonte CHORUS — suppression dépendances JPA/Hibernate', done: false },
+    { id: 'w7', label: 'NDF — cadrer évolutions analytiques et suppression de frais', done: false },
+    { id: 'w8', label: 'Outil Audit — préparer lot évolutions CRON/réconciliation/dynamique', done: false },
   ],
   projects: [
     {
-      id: 'chorus', name: 'Interface CHORUS', priority: 1, status: 'en-cours', progress: 45,
-      currentAction: 'Décommissionnement JPA/Hibernate en procédure stockée',
-      nextStep: 'Valider les tests en environnement THCR',
+      id: 'facturx-mentions', name: 'INTERFACE FACTURX — Mentions légales Terrena', priority: 1, status: 'ok', progress: 100,
+      currentAction: 'Développement et packaging livrés',
+      nextStep: 'Suivi post-livraison côté Terrena',
       tasks: [
-        { id: 'c1', label: 'Décom JPA / Hibernate → Procédures stockées', done: false },
-        { id: 'c2', label: 'Générer version de test', done: true },
+        { id: 'fx1', label: 'Développer ajout des mentions légales', done: true },
+        { id: 'fx2', label: 'Packager la version Terrena', done: true },
       ]
     },
     {
-      id: 'facturx', name: 'Interface FacturX', priority: 2, status: 'a-deployer', progress: 75,
-      currentAction: 'Préparer le déploiement Terrena avec les nouvelles fonctionnalités',
-      nextStep: 'Installer la version FacturX avec nouveautés chez Terrena',
+      id: 'mes-rdv-v2', name: 'Mes RDV V2', priority: 2, status: 'en-cours', progress: 55,
+      currentAction: 'Poursuite du développement ISO V1',
+      nextStep: 'Ajouter les fonctionnalités V2',
       tasks: [
-        { id: 'f1', label: 'Finaliser TX2', done: true },
-        { id: 'f2', label: 'API Sage — brouillon envoyé', done: true },
-        { id: 'f3', label: 'Préparer version Factur-X Terrena', done: false },
-        { id: 'f4', label: 'Installer nouveautés Terrena', done: false },
+        { id: 'rdv1', label: 'Continuer développement ISO V1', done: false },
+        { id: 'rdv2', label: 'Ajouter fonctionnalités V2', done: false },
       ]
     },
     {
-      id: 'graph', name: 'SYNC Graph — API Microsoft', priority: 3, status: 'en-cours', progress: 50,
-      currentAction: 'Décommissionnement des tables temporaires',
-      nextStep: 'Attente retour de test THCR · Relancer ticket PXO',
+      id: 'smart-tech-evol', name: 'Smart tech évol', priority: 3, status: 'bloque', progress: 35,
+      currentAction: 'Évolutions fonctionnelles préparées, en attente d’arbitrage',
+      nextStep: 'Relancer Nadir pour validation des évolutions 1 & 2',
       tasks: [
-        { id: 'g1', label: 'Analyse API Sage envoyée', done: true },
-        { id: 'g2', label: 'Brouillon GRAPH — premier jet', done: true },
-        { id: 'g3', label: 'Retour de test THCR', done: false },
-        { id: 'g4', label: 'Relancer suivi ticket PXO', done: false },
+        { id: 'ste1', label: 'Évolution 1 : une intervention sur plusieurs dates — En attente Nadir', done: false },
+        { id: 'ste2', label: 'Évolution 2 : une intervention avec plusieurs participants — En attente Nadir', done: false },
       ]
     },
     {
-      id: 'ndf', name: 'Appli NDF', priority: 4, status: 'ok', progress: 70,
-      currentAction: 'Développement du module analytique',
-      nextStep: 'Intégrer ajout analytique + suppression de frais',
+      id: 'addin-outlook', name: 'Add-in Outlook', priority: 4, status: 'en-cours', progress: 60,
+      currentAction: 'Construction de la V1',
+      nextStep: 'Finaliser puis valider une V1 exploitable',
       tasks: [
-        { id: 'n1', label: 'Démo sur NA-ATHERP', done: true },
-        { id: 'n2', label: 'Ajout analytique', done: false },
-        { id: 'n3', label: 'Suppression d\'un frais dans NDF', done: false },
+        { id: 'ao1', label: 'Test protocole ATH depuis le nouveau client Windows', done: true },
+        { id: 'ao2', label: 'Réalisation d’une V1', done: false },
       ]
     },
     {
-      id: 'scanit', name: 'SCAN-IT', priority: 5, status: 'en-cours', progress: 80,
-      currentAction: 'Finalisation des modifications récentes',
-      nextStep: 'Démo des modifs — validation fonctionnelle',
+      id: 'ws-notif', name: 'WS notif', priority: 5, status: 'ok', progress: 100,
+      currentAction: 'Validation technique réalisée',
+      nextStep: 'Capitaliser ce test dans un flux produit',
       tasks: [
-        { id: 's1', label: 'Finalisation fonctionnelle', done: false },
-        { id: 's2', label: 'Démo modifs récentes', done: false },
+        { id: 'ws1', label: 'Tester la création d’un mail brouillon depuis WS Notif', done: true },
       ]
     },
     {
-      id: 'outlook', name: 'Add-in Outlook', priority: 6, status: 'en-cours', progress: 50,
-      currentAction: 'Développement en cours — brouillon mail via API GRAPH',
-      nextStep: 'Créer brouillon de mail depuis l\'API GRAPH (TODO YN)',
+      id: 'tx2', name: 'Interface TX2', priority: 6, status: 'en-cours', progress: 65,
+      currentAction: 'Analyse des retours de test de Théry',
+      nextStep: 'Appliquer corrections puis revalider',
       tasks: [
-        { id: 'o1', label: 'Développement Add-in', done: true },
-        { id: 'o2', label: 'Créer brouillon depuis API GRAPH', done: false },
-        { id: 'o3', label: 'Démo à préparer', done: false },
+        { id: 'tx1', label: 'Retour de test de Théry', done: false },
       ]
     },
     {
-      id: 'athmobile', name: 'ATH Mobile', priority: 7, status: 'en-cours', progress: 40,
-      currentAction: 'Développements en cours',
-      nextStep: 'Préparer démo du développement en cours',
+      id: 'outil-audit', name: 'Outil audit', priority: 7, status: 'bloque', progress: 70,
+      currentAction: 'Socle livré, évolutions en file d’attente',
+      nextStep: 'Prioriser CRON, réconciliation auto puis paramétrage dynamique',
       tasks: [
-        { id: 'a1', label: 'Développements feature en cours', done: false },
-        { id: 'a2', label: 'Démo à préparer', done: false },
+        { id: 'au1', label: 'Développement du socle', done: true },
+        { id: 'au2', label: 'Évolution 1 : tâche cron pour lancer Audit — En attente', done: false },
+        { id: 'au3', label: 'Évolution 2 : réconciliation auto — En attente', done: false },
+        { id: 'au4', label: 'Évolution 3 : paramètre dynamique — En attente', done: false },
       ]
     },
     {
-      id: 'smarttech', name: 'SMART TECH V2', priority: 8, status: 'en-cours', progress: 30,
-      currentAction: 'Refonte en application PWA classique',
-      nextStep: 'Avancer API V2 + migration PWA',
+      id: 'ndf', name: 'Appli NDF', priority: 8, status: 'en-cours', progress: 72,
+      currentAction: 'Lot d’évolutions post-développement',
+      nextStep: 'Livrer ajout analytique/gestion frais véhicule puis suppression de frais',
       tasks: [
-        { id: 'st1', label: 'Migration vers PWA classique', done: false },
-        { id: 'st2', label: 'Avancer API V2', done: false },
+        { id: 'ndf1', label: 'Développement initial', done: true },
+        { id: 'ndf2', label: 'Évolution 1 : ajout analytique / gestion frais véhicule', done: false },
+        { id: 'ndf3', label: 'Évolution 2 : supprimer un frais d’une note de frais', done: false },
       ]
     },
     {
-      id: 'audit', name: 'Outil d\'Audit', priority: 9, status: 'bloque', progress: 20,
-      currentAction: 'En attente d\'arbitrage sur la suite',
-      nextStep: 'Décider : CRON auto + réconciliation + paramétrage dynamique ?',
+      id: 'sage', name: 'Interface SAGE', priority: 9, status: 'a-deployer', progress: 85,
+      currentAction: 'Développement terminé, en phase de préparation tests',
+      nextStep: 'Lancer et valider le test fonctionnel',
       tasks: [
-        { id: 'au1', label: 'Point d\'avancement (à faire en réunion YN)', done: false },
-        { id: 'au2', label: 'CRON pour lancer Audit automatiquement', done: false },
-        { id: 'au3', label: 'Réconciliation automatique', done: false },
-        { id: 'au4', label: 'Paramétrage dynamique des champs', done: false },
+        { id: 'sg1', label: 'Développement', done: true },
+        { id: 'sg2', label: 'Test fonctionnel — En attente', done: false },
       ]
     },
     {
-      id: 'rdv', name: 'RDV V2 / Bookings', priority: 10, status: 'a-cadrer', progress: 10,
-      currentAction: 'Scope non défini',
-      nextStep: 'Cadrer le périmètre fonctionnel avec YN',
+      id: 'refonte-smart-tech', name: 'Refonte smart tech', priority: 10, status: 'en-cours', progress: 48,
+      currentAction: 'Refonte API SMART-TECH pour branchement direct BDD ATHENEO',
+      nextStep: 'Stabiliser la connexion et finaliser les endpoints clés',
       tasks: [
-        { id: 'r1', label: 'Cadrage du scope à faire', done: false },
-        { id: 'r2', label: 'Démarrage développement', done: false },
+        { id: 'rst1', label: 'Refonte API SMART-TECH vers la BDD ATHENEO', done: false },
+      ]
+    },
+    {
+      id: 'refonte-chorus', name: 'Refonte chorus / hibernate', priority: 11, status: 'en-cours', progress: 50,
+      currentAction: 'Suppression progressive des dépendances JPA/Hibernate',
+      nextStep: 'Finaliser la migration puis lancer batterie de tests',
+      tasks: [
+        { id: 'rc1', label: 'Supprimer dépendances JPA/Hibernate dans Interface CHORUS', done: false },
+      ]
+    },
+    {
+      id: 'bookings', name: 'BOOKINGS', priority: 12, status: 'a-cadrer', progress: 15,
+      currentAction: 'Projet en observation',
+      nextStep: 'Décider si le développement doit être maintenu',
+      tasks: [
+        { id: 'bk1', label: 'Pertinence de maintenir le développement ? — En attente', done: false },
+      ]
+    },
+    {
+      id: 'scan-it', name: 'Scan it', priority: 13, status: 'bloque', progress: 58,
+      currentAction: 'Socle série finalisé, attente validations externes',
+      nextStep: 'Débloquer AMOR puis lancer test global',
+      tasks: [
+        { id: 'sc1', label: 'Développement gestion numéro de série', done: true },
+        { id: 'sc2', label: 'Adaptation fonctionnelle des requêtes — En attente AMOR', done: false },
+        { id: 'sc3', label: 'Test global de l’application — En attente', done: false },
       ]
     },
   ]

@@ -1,61 +1,50 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,300;0,14..32,400;0,14..32,500;0,14..32,600;0,14..32,700;0,14..32,800;0,14..32,900&family=DM+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Baloo+2:wght@400;500;600;700;800&family=Nunito:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* ─── Design tokens ─────────────────────────────────────── */
 :root {
-  /* Warm neutrals */
-  --bg:          #F7F3EE;
-  --surface:     #FFFFFF;
-  --surface-2:   #F0EAE0;
-  --surface-3:   #E8DFD0;
+  --bg: #fff8e8;
+  --surface: #ffffff;
+  --surface-2: #fff1cf;
+  --surface-3: #ffe3a3;
 
-  /* Borders */
-  --border:      #E0D6C8;
-  --border-2:    #C9BBA9;
+  --border: #ffd58c;
+  --border-2: #ffbf5f;
 
-  /* Text */
-  --text:        #1C1612;
-  --text-2:      #6B5B4A;
-  --text-3:      #A8937A;
+  --text: #3a2a15;
+  --text-2: #7a5a2b;
+  --text-3: #b8893f;
 
-  /* Accent — amber/ochre */
-  --accent:         #C2700A;
-  --accent-dark:    #92520A;
-  --accent-light:   #FEF3E2;
-  --accent-border:  #F6C27A;
+  --accent: #ff7a59;
+  --accent-dark: #e45f3c;
+  --accent-light: #ffe2d8;
+  --accent-border: #ffb29f;
 
-  /* Status */
-  --s-active-color:  #4F46E5; --s-active-bg:   #EEEDFD; --s-active-border: #C4C2F7;
-  --s-deploy-color:  #B45309; --s-deploy-bg:   #FEF3E2; --s-deploy-border: #F6C27A;
-  --s-done-color:    #15803D; --s-done-bg:     #ECFDF5; --s-done-border:   #86EFAC;
-  --s-blocked-color: #DC2626; --s-blocked-bg:  #FEF2F2; --s-blocked-border:#FCA5A5;
-  --s-frame-color:   #78716C; --s-frame-bg:    #F5F0EA; --s-frame-border:  #D6CFC7;
+  --header: #fff0d2;
+  --header-border: #ffd08a;
 
-  /* Header */
-  --header:      #1C1612;
-  --header-border: #2D2420;
+  --font-body: 'Nunito', system-ui, -apple-system, sans-serif;
+  --font-mono: 'DM Mono', 'Courier New', monospace;
+  --font-title: 'Baloo 2', 'Nunito', sans-serif;
 
-  /* Typography */
-  --font-body:    'Inter', system-ui, -apple-system, sans-serif;
-  --font-mono:    'DM Mono', 'Courier New', monospace;
-
-  /* Shadows — warm tint */
-  --shadow-xs: 0 1px 2px rgba(28, 22, 18, 0.05);
-  --shadow-sm: 0 1px 4px rgba(28, 22, 18, 0.08), 0 1px 2px rgba(28, 22, 18, 0.04);
-  --shadow-md: 0 4px 12px rgba(28, 22, 18, 0.09), 0 2px 4px rgba(28, 22, 18, 0.05);
-  --shadow-lg: 0 12px 32px rgba(28, 22, 18, 0.12), 0 4px 8px rgba(28, 22, 18, 0.06);
+  --shadow-xs: 0 2px 0 rgba(255, 176, 78, 0.35);
+  --shadow-sm: 0 4px 0 rgba(255, 176, 78, 0.35), 0 10px 20px rgba(255, 164, 73, 0.18);
+  --shadow-md: 0 6px 0 rgba(255, 176, 78, 0.38), 0 14px 28px rgba(255, 164, 73, 0.2);
+  --shadow-lg: 0 8px 0 rgba(255, 176, 78, 0.4), 0 18px 34px rgba(255, 164, 73, 0.24);
 }
 
-/* ─── Reset ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
 html { scroll-behavior: smooth; }
 
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(255, 140, 102, 0.22), transparent 28%),
+    radial-gradient(circle at 88% 12%, rgba(98, 198, 255, 0.2), transparent 30%),
+    radial-gradient(circle at 24% 86%, rgba(132, 220, 130, 0.2), transparent 26%),
+    radial-gradient(circle at 78% 80%, rgba(255, 209, 92, 0.2), transparent 28%),
+    var(--bg);
   color: var(--text);
   font-family: var(--font-body);
   font-size: 14px;
@@ -65,55 +54,45 @@ body {
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11', 'ss01';
 }
 
-/* Warm noise texture on background */
 body::before {
   content: '';
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
-  opacity: 0.018;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 128px;
+  opacity: 0.2;
+  background-image: radial-gradient(rgba(255, 172, 70, 0.22) 1px, transparent 1px);
+  background-size: 14px 14px;
 }
 
 main, header, aside, section, article { position: relative; z-index: 1; }
+::selection { background: #ff7a5944; color: var(--text); }
 
-::selection { background: #C2700A22; color: var(--text); }
-
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: #fff3da; }
+::-webkit-scrollbar-thumb { background: #ffc670; border-radius: 999px; }
 
 input, textarea, select, button { font-family: var(--font-body); }
 button { cursor: pointer; }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid #ff7a59;
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 6px;
 }
 
-/* ─── Animations ────────────────────────────────────────── */
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fadeIn {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
+@keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bob { 0%,100%{ transform: translateY(0);} 50%{ transform: translateY(-3px);} }
 
 .slide-up { animation: slideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .fade-in  { animation: fadeIn  0.22s ease both; }
-
-/* ─── Utility ───────────────────────────────────────────── */
 .tabular { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
 .mono    { font-family: var(--font-mono); }
 .caps    { text-transform: uppercase; letter-spacing: 0.08em; }
 
-/* ─── Print ─────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 { font-family: var(--font-title); }
+
 @media print {
   @page { size: A4; margin: 14mm 12mm; }
   body { background: white !important; }
