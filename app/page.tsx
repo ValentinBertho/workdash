@@ -181,6 +181,8 @@ export default function Page() {
   const doneTodos = data.weeklyTodos.filter(t=>t.done).length;
   const recentLog = [...changelog].reverse().slice(0,10);
   const openDec   = decisions.filter(d=>d.status==='open').length;
+  const waitingTasks = sorted.flatMap(p=>p.tasks.filter(t=>!t.done && /attente/i.test(t.label)).map(t=>({project:p.name,label:t.label})));
+  const momentum = sorted.filter(p=>p.progress>=70 && p.status!=='ok').slice(0,3);
 
   const sections = [
     {status:'en-cours' as Status, items:active},
@@ -220,7 +222,7 @@ export default function Page() {
           <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}}>
             <div style={{background:'rgba(255,255,255,0.03)',borderRadius:10,padding:'16px 18px',border:'1px solid rgba(255,255,255,0.10)'}}>
               <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:'#7C8ACF',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:8}}>En ce moment</p>
-              <p style={{fontSize:'0.88rem',color:'#C4B09A',lineHeight:1.6}}>{mp.currentAction}</p>
+              <p style={{fontSize:'0.88rem',color:'var(--text-2)',lineHeight:1.6}}>{mp.currentAction}</p>
             </div>
             <div style={{background:`${ms.color}12`,borderRadius:10,padding:'16px 18px',border:`1px solid ${ms.color}30`}}>
               <p style={{fontFamily:'var(--font-mono)',fontSize:'0.58rem',color:ms.color,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:8,opacity:0.8}}>Prochaine étape</p>
@@ -294,13 +296,14 @@ export default function Page() {
       <main style={{maxWidth:1440,margin:'0 auto',padding:'32px 32px 64px'}}>
 
         {/* ── KPI strip ── */}
-        <div style={{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginBottom:36}}>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(6,1fr)',gap:10,marginBottom:20}}>
           {([
             {label:'Projets',    value:`${data.projects.length}`,  sub:`${active.length} actifs`,        color:'var(--text)'},
             {label:'À déployer', value:`${deploy.length}`,         sub:'prêts à livrer',                color:'#B45309'},
             {label:'Avancement', value:`${avgProg}%`,              sub:'progression globale',            color:pgColor(avgProg)},
             {label:'En retard',  value:`${overdue}`,               sub:overdue>0?'projets':'aucun',     color:overdue>0?'#DC2626':'#15803D'},
             {label:'À décider',  value:`${openDec}`,               sub:'points ouverts',                color:openDec>0?'#B45309':'#15803D'},
+            {label:'Dépendances', value:`${waitingTasks.length}`,      sub:'actions en attente externe',    color:waitingTasks.length>0?'#DC2626':'#15803D'},
           ] as const).map((k,i)=>(
             <div key={i} className="slide-up" style={{...card,animationDelay:`${i*0.05}s`,padding:'20px 22px',borderRadius:10,position:'relative',overflow:'hidden'}}>
               <div style={{position:'absolute',top:0,left:0,width:4,height:'100%',background:k.color,opacity:0.6,borderRadius:'10px 0 0 10px'}} />
@@ -309,6 +312,37 @@ export default function Page() {
               <p style={{fontSize:'0.72rem',color:'var(--text-3)',marginTop:5,fontWeight:500}}>{k.sub}</p>
             </div>
           ))}
+        </div>
+
+
+        <div style={{display:'grid',gridTemplateColumns:'1.5fr 1fr',gap:10,marginBottom:30}}>
+          <div className="slide-up" style={{...card,padding:'16px 18px'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:10}}>
+              <span className="caps mono" style={{fontSize:'0.62rem',color:'var(--text-3)'}}>Cockpit manager · priorités de déblocage</span>
+              <span className="mono" style={{fontSize:'0.66rem',color:waitingTasks.length>0?'#FCA5A5':'#86EFAC'}}>{waitingTasks.length} dépendance{waitingTasks.length>1?'s':''}</span>
+            </div>
+            {waitingTasks.length===0 ? (
+              <p style={{fontSize:'0.78rem',color:'#86EFAC'}}>Aucun blocage externe détecté 🎉</p>
+            ) : (
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {waitingTasks.slice(0,6).map((w,i)=>(
+                  <div key={i} style={{background:'rgba(220,38,38,0.12)',border:'1px solid rgba(248,113,113,0.35)',borderRadius:10,padding:'9px 10px'}}>
+                    <p style={{fontSize:'0.62rem',color:'#FCA5A5',fontWeight:700,marginBottom:4}}>{w.project}</p>
+                    <p style={{fontSize:'0.73rem',color:'var(--text-2)',lineHeight:1.35}}>{w.label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="slide-up" style={{...card,padding:'16px 18px',animationDelay:'0.06s'}}>
+            <span className="caps mono" style={{fontSize:'0.62rem',color:'var(--text-3)',display:'block',marginBottom:10}}>Momentum</span>
+            {momentum.length===0 ? <p style={{fontSize:'0.76rem',color:'var(--text-3)'}}>Pas de projet proche livraison</p> : momentum.map((p)=> (
+              <div key={p.id} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'6px 0',borderBottom:'1px solid rgba(255,255,255,0.08)'}}>
+                <span style={{fontSize:'0.76rem',color:'var(--text-2)',maxWidth:'75%'}}>{p.name}</span>
+                <strong style={{fontSize:'0.78rem',color:'#86EFAC'}}>{p.progress}%</strong>
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* ── Main layout ── */}
