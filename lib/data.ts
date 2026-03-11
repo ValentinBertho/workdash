@@ -1,82 +1,17 @@
-import fs from 'fs';
-import path from 'path';
-import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint } from '@/types';
+import { eq, notInArray, desc, sql } from 'drizzle-orm';
+import { db } from './db';
+import {
+  projects as projectsTable,
+  tasks as tasksTable,
+  weeklyTodos as todosTable,
+  comments as commentsTable,
+  changelog as changelogTable,
+  managerTasks as managerTasksTable,
+  decisions as decisionsTable,
+} from './db/schema';
+import { DashboardData, Comment, ChangelogEntry, ManagerTask, DecisionPoint, Status } from '@/types';
 
-// File-based storage (falls back to in-memory when filesystem is read-only, e.g. Vercel)
-// You can force a persistent folder with WORKDASH_DATA_DIR.
-const DATA_DIR = process.env.WORKDASH_DATA_DIR
-  ?? (process.env.VERCEL ? '/tmp/workdash-data' : path.join(process.cwd(), '.data'));
-const memoryStore = new Map<string, unknown>();
-
-function canUseFileStorage(): boolean {
-  try {
-    if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-function readFile<T>(filename: string, fallback: T): T {
-  if (!canUseFileStorage()) {
-    return (memoryStore.get(filename) as T | undefined) ?? fallback;
-  }
-
-  const file = path.join(DATA_DIR, filename);
-  const backup = `${file}.bak`;
-  try {
-    if (!fs.existsSync(file)) {
-      if (fs.existsSync(backup)) {
-        return JSON.parse(fs.readFileSync(backup, 'utf-8')) as T;
-      }
-      return fallback;
-    }
-    return JSON.parse(fs.readFileSync(file, 'utf-8')) as T;
-  } catch {
-    // Corrupted write safety net: recover from previous good snapshot.
-    try {
-      if (fs.existsSync(backup)) {
-        return JSON.parse(fs.readFileSync(backup, 'utf-8')) as T;
-      }
-    } catch {
-      // noop
-    }
-    return fallback;
-  }
-}
-
-function writeFile(filename: string, data: unknown): void {
-  if (!canUseFileStorage()) {
-    memoryStore.set(filename, data);
-    return;
-  }
-
-  const file = path.join(DATA_DIR, filename);
-  const backup = `${file}.bak`;
-  const temp = `${file}.tmp`;
-  try {
-    // Keep last successful snapshot.
-    if (fs.existsSync(file)) fs.copyFileSync(file, backup);
-    // Atomic replace to avoid partial/corrupted files on crash.
-    fs.writeFileSync(temp, JSON.stringify(data, null, 2), 'utf-8');
-    fs.renameSync(temp, file);
-  } catch {
-    try {
-      if (fs.existsSync(temp)) fs.unlinkSync(temp);
-    } catch {
-      // noop
-    }
-    memoryStore.set(filename, data);
-  }
-}
-
-const DEFAULT_DECISIONS: DecisionPoint[] = [
-  { id: 'dp1', text: 'SMART TECH évol : arbitrer les évolutions en attente de validation Nadir', status: 'open', createdAt: new Date('2026-03-01').toISOString() },
-  { id: 'dp2', text: 'BOOKINGS : confirmer la pertinence de maintenir le développement', status: 'open', createdAt: new Date('2026-03-01').toISOString() },
-  { id: 'dp3', text: 'SCAN IT : planifier validation AMOR + fenêtre de test global', status: 'open', createdAt: new Date('2026-03-01').toISOString() },
-];
-
-/* ─── Dashboard data ─────────────────────────────────────────── */
+/* ─── Default seed data ──────────────────────────────────────── */
 export const defaultData: DashboardData = {
   updatedAt: new Date().toISOString(),
   weeklyTodos: [
@@ -110,7 +45,7 @@ export const defaultData: DashboardData = {
     },
     {
       id: 'smart-tech-evol', name: 'Smart tech évol', priority: 3, status: 'bloque', progress: 35,
-      currentAction: 'Évolutions fonctionnelles préparées, en attente d’arbitrage',
+      currentAction: 'Évolutions fonctionnelles préparées, en attente d\'arbitrage',
       nextStep: 'Relancer Nadir pour validation des évolutions 1 & 2',
       tasks: [
         { id: 'ste1', label: 'Évolution 1 : une intervention sur plusieurs dates — En attente Nadir', done: false },
@@ -123,7 +58,7 @@ export const defaultData: DashboardData = {
       nextStep: 'Finaliser puis valider une V1 exploitable',
       tasks: [
         { id: 'ao1', label: 'Test protocole ATH depuis le nouveau client Windows', done: true },
-        { id: 'ao2', label: 'Réalisation d’une V1', done: false },
+        { id: 'ao2', label: 'Réalisation d\'une V1', done: false },
       ]
     },
     {
@@ -131,7 +66,7 @@ export const defaultData: DashboardData = {
       currentAction: 'Validation technique réalisée',
       nextStep: 'Capitaliser ce test dans un flux produit',
       tasks: [
-        { id: 'ws1', label: 'Tester la création d’un mail brouillon depuis WS Notif', done: true },
+        { id: 'ws1', label: 'Tester la création d\'un mail brouillon depuis WS Notif', done: true },
       ]
     },
     {
@@ -144,7 +79,7 @@ export const defaultData: DashboardData = {
     },
     {
       id: 'outil-audit', name: 'Outil audit', priority: 7, status: 'bloque', progress: 70,
-      currentAction: 'Socle livré, évolutions en file d’attente',
+      currentAction: 'Socle livré, évolutions en file d\'attente',
       nextStep: 'Prioriser CRON, réconciliation auto puis paramétrage dynamique',
       tasks: [
         { id: 'au1', label: 'Développement du socle', done: true },
@@ -155,12 +90,12 @@ export const defaultData: DashboardData = {
     },
     {
       id: 'ndf', name: 'Appli NDF', priority: 8, status: 'en-cours', progress: 72,
-      currentAction: 'Lot d’évolutions post-développement',
+      currentAction: 'Lot d\'évolutions post-développement',
       nextStep: 'Livrer ajout analytique/gestion frais véhicule puis suppression de frais',
       tasks: [
         { id: 'ndf1', label: 'Développement initial', done: true },
         { id: 'ndf2', label: 'Évolution 1 : ajout analytique / gestion frais véhicule', done: false },
-        { id: 'ndf3', label: 'Évolution 2 : supprimer un frais d’une note de frais', done: false },
+        { id: 'ndf3', label: 'Évolution 2 : supprimer un frais d\'une note de frais', done: false },
       ]
     },
     {
@@ -203,83 +138,280 @@ export const defaultData: DashboardData = {
       tasks: [
         { id: 'sc1', label: 'Développement gestion numéro de série', done: true },
         { id: 'sc2', label: 'Adaptation fonctionnelle des requêtes — En attente AMOR', done: false },
-        { id: 'sc3', label: 'Test global de l’application — En attente', done: false },
+        { id: 'sc3', label: 'Test global de l\'application — En attente', done: false },
       ]
     },
   ]
 };
 
+/* ─── Dashboard data ─────────────────────────────────────────── */
 export async function getData(): Promise<DashboardData> {
-  return readFile<DashboardData>('dashboard.json', defaultData);
+  const [projectRows, taskRows, todoRows] = await Promise.all([
+    db.select().from(projectsTable).orderBy(projectsTable.priority),
+    db.select().from(tasksTable),
+    db.select().from(todosTable).orderBy(todosTable.sortOrder),
+  ]);
+
+  // Auto-seed on first run
+  if (projectRows.length === 0) {
+    await saveData(defaultData);
+    return defaultData;
+  }
+
+  return {
+    projects: projectRows.map(p => ({
+      id: p.id,
+      name: p.name,
+      priority: p.priority,
+      status: p.status as Status,
+      progress: p.progress,
+      currentAction: p.currentAction,
+      nextStep: p.nextStep,
+      tasks: taskRows
+        .filter(t => t.projectId === p.id)
+        .map(t => ({
+          id: t.id,
+          label: t.label,
+          done: t.done,
+          ...(t.assignedBy ? { assignedBy: t.assignedBy as 'manager' } : {}),
+          ...(t.dueDate ? { dueDate: t.dueDate } : {}),
+        })),
+      ...(p.notes ? { notes: p.notes } : {}),
+      ...(p.dueDate ? { dueDate: p.dueDate } : {}),
+    })),
+    weeklyTodos: todoRows.map(t => ({ id: t.id, label: t.label, done: t.done })),
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export async function saveData(data: DashboardData): Promise<void> {
-  writeFile('dashboard.json', { ...data, updatedAt: new Date().toISOString() });
+  const now = new Date().toISOString();
+
+  if (data.projects.length > 0) {
+    await db.insert(projectsTable)
+      .values(data.projects.map(p => ({
+        id: p.id,
+        name: p.name,
+        priority: p.priority,
+        status: p.status,
+        progress: p.progress,
+        currentAction: p.currentAction,
+        nextStep: p.nextStep,
+        notes: p.notes ?? null,
+        dueDate: p.dueDate ?? null,
+        updatedAt: now,
+      })))
+      .onConflictDoUpdate({
+        target: projectsTable.id,
+        set: {
+          name: sql`excluded.name`,
+          priority: sql`excluded.priority`,
+          status: sql`excluded.status`,
+          progress: sql`excluded.progress`,
+          currentAction: sql`excluded.current_action`,
+          nextStep: sql`excluded.next_step`,
+          notes: sql`excluded.notes`,
+          dueDate: sql`excluded.due_date`,
+          updatedAt: sql`excluded.updated_at`,
+        },
+      });
+    const projectIds = data.projects.map(p => p.id);
+    await db.delete(projectsTable).where(notInArray(projectsTable.id, projectIds));
+  } else {
+    await db.delete(projectsTable);
+  }
+
+  const allTasks = data.projects.flatMap(p =>
+    p.tasks.map(t => ({
+      id: t.id,
+      projectId: p.id,
+      label: t.label,
+      done: t.done,
+      assignedBy: t.assignedBy ?? null,
+      dueDate: t.dueDate ?? null,
+    }))
+  );
+
+  if (allTasks.length > 0) {
+    await db.insert(tasksTable)
+      .values(allTasks)
+      .onConflictDoUpdate({
+        target: tasksTable.id,
+        set: {
+          label: sql`excluded.label`,
+          done: sql`excluded.done`,
+          assignedBy: sql`excluded.assigned_by`,
+          dueDate: sql`excluded.due_date`,
+        },
+      });
+    const taskIds = allTasks.map(t => t.id);
+    await db.delete(tasksTable).where(notInArray(tasksTable.id, taskIds));
+  } else {
+    await db.delete(tasksTable);
+  }
+
+  if (data.weeklyTodos.length > 0) {
+    await db.insert(todosTable)
+      .values(data.weeklyTodos.map((t, i) => ({
+        id: t.id,
+        label: t.label,
+        done: t.done,
+        sortOrder: i,
+      })))
+      .onConflictDoUpdate({
+        target: todosTable.id,
+        set: {
+          label: sql`excluded.label`,
+          done: sql`excluded.done`,
+          sortOrder: sql`excluded.sort_order`,
+        },
+      });
+    const todoIds = data.weeklyTodos.map(t => t.id);
+    await db.delete(todosTable).where(notInArray(todosTable.id, todoIds));
+  } else {
+    await db.delete(todosTable);
+  }
 }
 
 /* ─── Comments ───────────────────────────────────────────────── */
 export async function getComments(): Promise<Comment[]> {
-  return readFile<Comment[]>('comments.json', []);
+  const rows = await db.select().from(commentsTable).orderBy(commentsTable.createdAt);
+  return rows.map(r => ({
+    id: r.id,
+    projectId: r.projectId,
+    author: r.author as 'manager' | 'valentin',
+    text: r.text,
+    createdAt: r.createdAt,
+  }));
 }
 
 export async function saveComment(comment: Comment): Promise<void> {
-  const existing = await getComments();
-  writeFile('comments.json', [...existing, comment]);
+  await db.insert(commentsTable).values({
+    id: comment.id,
+    projectId: comment.projectId,
+    author: comment.author,
+    text: comment.text,
+    createdAt: comment.createdAt,
+  });
 }
 
 export async function deleteComment(id: string): Promise<void> {
-  const existing = await getComments();
-  writeFile('comments.json', existing.filter(c => c.id !== id));
+  await db.delete(commentsTable).where(eq(commentsTable.id, id));
 }
 
 /* ─── Changelog ──────────────────────────────────────────────── */
 export async function getChangelog(): Promise<ChangelogEntry[]> {
-  return readFile<ChangelogEntry[]>('changelog.json', []);
+  const rows = await db.select().from(changelogTable)
+    .orderBy(desc(changelogTable.createdAt))
+    .limit(500);
+  return rows.map(r => ({
+    id: r.id,
+    projectId: r.projectId ?? undefined,
+    projectName: r.projectName ?? undefined,
+    type: r.type as ChangelogEntry['type'],
+    description: r.description,
+    from: r.fromValue ?? undefined,
+    to: r.toValue ?? undefined,
+    createdAt: r.createdAt,
+    author: r.author as ChangelogEntry['author'],
+  }));
 }
 
 export async function addChangelogEntries(entries: ChangelogEntry[]): Promise<void> {
   if (entries.length === 0) return;
-  const existing = await getChangelog();
-  const merged = [...existing, ...entries];
-  writeFile('changelog.json', merged.slice(-500));
+  await db.insert(changelogTable).values(entries.map(e => ({
+    id: e.id,
+    projectId: e.projectId ?? null,
+    projectName: e.projectName ?? null,
+    type: e.type,
+    description: e.description,
+    fromValue: e.from ?? null,
+    toValue: e.to ?? null,
+    createdAt: e.createdAt,
+    author: e.author,
+  })));
 }
 
 /* ─── Manager tasks ──────────────────────────────────────────── */
 export async function getManagerTasks(): Promise<ManagerTask[]> {
-  return readFile<ManagerTask[]>('manager-tasks.json', []);
+  const rows = await db.select().from(managerTasksTable).orderBy(desc(managerTasksTable.createdAt));
+  return rows.map(r => ({
+    id: r.id,
+    projectId: r.projectId,
+    projectName: r.projectName,
+    label: r.label,
+    priority: r.priority as 'high' | 'medium' | 'low',
+    dueDate: r.dueDate ?? undefined,
+    done: r.done,
+    createdAt: r.createdAt,
+    note: r.note ?? undefined,
+  }));
 }
 
 export async function saveManagerTask(task: ManagerTask): Promise<void> {
-  const existing = await getManagerTasks();
-  writeFile('manager-tasks.json', [...existing, task]);
+  await db.insert(managerTasksTable).values({
+    id: task.id,
+    projectId: task.projectId,
+    projectName: task.projectName,
+    label: task.label,
+    priority: task.priority,
+    dueDate: task.dueDate ?? null,
+    done: task.done,
+    createdAt: task.createdAt,
+    note: task.note ?? null,
+  });
 }
 
 export async function updateManagerTask(id: string, updates: Partial<ManagerTask>): Promise<void> {
-  const existing = await getManagerTasks();
-  writeFile('manager-tasks.json', existing.map(t => t.id === id ? { ...t, ...updates } : t));
+  const set: Partial<typeof managerTasksTable.$inferInsert> = {};
+  if (updates.label !== undefined) set.label = updates.label;
+  if (updates.priority !== undefined) set.priority = updates.priority;
+  if (updates.dueDate !== undefined) set.dueDate = updates.dueDate ?? null;
+  if (updates.done !== undefined) set.done = updates.done;
+  if (updates.note !== undefined) set.note = updates.note ?? null;
+  if (Object.keys(set).length > 0) {
+    await db.update(managerTasksTable).set(set).where(eq(managerTasksTable.id, id));
+  }
 }
 
 export async function deleteManagerTask(id: string): Promise<void> {
-  const existing = await getManagerTasks();
-  writeFile('manager-tasks.json', existing.filter(t => t.id !== id));
+  await db.delete(managerTasksTable).where(eq(managerTasksTable.id, id));
 }
 
-/* ─── Decision points ────────────────────────────────────── */
+/* ─── Decision points ────────────────────────────────────────── */
 export async function getDecisions(): Promise<DecisionPoint[]> {
-  return readFile<DecisionPoint[]>('decisions.json', DEFAULT_DECISIONS);
+  const rows = await db.select().from(decisionsTable).orderBy(decisionsTable.createdAt);
+  return rows.map(r => ({
+    id: r.id,
+    text: r.text,
+    status: r.status as 'open' | 'decided' | 'deferred',
+    resolution: r.resolution ?? undefined,
+    createdAt: r.createdAt,
+    updatedAt: r.updatedAt ?? undefined,
+  }));
 }
 
 export async function saveDecision(decision: DecisionPoint): Promise<void> {
-  const existing = await getDecisions();
-  writeFile('decisions.json', [...existing, decision]);
+  await db.insert(decisionsTable).values({
+    id: decision.id,
+    text: decision.text,
+    status: decision.status,
+    resolution: decision.resolution ?? null,
+    createdAt: decision.createdAt,
+    updatedAt: null,
+  });
 }
 
 export async function updateDecision(id: string, updates: Partial<DecisionPoint>): Promise<void> {
-  const existing = await getDecisions();
-  writeFile('decisions.json', existing.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d));
+  const set: Partial<typeof decisionsTable.$inferInsert> = {
+    updatedAt: new Date().toISOString(),
+  };
+  if (updates.status !== undefined) set.status = updates.status;
+  if (updates.resolution !== undefined) set.resolution = updates.resolution ?? null;
+  if (updates.text !== undefined) set.text = updates.text;
+  await db.update(decisionsTable).set(set).where(eq(decisionsTable.id, id));
 }
 
 export async function deleteDecision(id: string): Promise<void> {
-  const existing = await getDecisions();
-  writeFile('decisions.json', existing.filter(d => d.id !== id));
+  await db.delete(decisionsTable).where(eq(decisionsTable.id, id));
 }
