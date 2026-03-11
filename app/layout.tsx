@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'WorkDash — Valentin · MISMO',
-  description: 'Tableau de bord charge de travail',
+  title: 'WorkDash — Gestion de dossiers en équipe',
+  description: 'Gérez vos dossiers en équipe, sans compte à créer.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

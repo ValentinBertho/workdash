@@ -1,52 +1,44 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
+import { TeamSession } from '@/types';
 
-const SECRET = new TextEncoder().encode(
-  process.env.AUTH_SECRET ?? 'dev-secret-change-me-in-prod'
+const secret = new TextEncoder().encode(
+  process.env.AUTH_SECRET ?? 'dev-secret-change-in-prod'
 );
 
-/* ─── Admin (Valentin) ───────────────────────────────────────── */
-const COOKIE_NAME = 'workdash-admin';
-
-export async function signToken(): Promise<string> {
-  return new SignJWT({ role: 'admin' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime('7d')
-    .sign(SECRET);
+export function cookieName(slug: string) {
+  return `workdash-${slug}`;
 }
 
-export async function isAuthenticated(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return false;
-  try {
-    const { payload } = await jwtVerify(token, SECRET);
-    return payload.role === 'admin';
-  } catch { return false; }
-}
-
-export { COOKIE_NAME };
-
-/* ─── Manager ────────────────────────────────────────────────── */
-const MANAGER_COOKIE = 'workdash-manager';
-
-export async function signManagerToken(): Promise<string> {
-  return new SignJWT({ role: 'manager' })
+export async function createTeamToken(session: TeamSession): Promise<string> {
+  return new SignJWT({ ...session })
     .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
     .setExpirationTime('30d')
-    .sign(SECRET);
+    .sign(secret);
 }
 
-export async function isManagerAuthenticated(): Promise<boolean> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(MANAGER_COOKIE)?.value;
-  if (!token) return false;
+export async function getTeamSession(slug: string): Promise<TeamSession | null> {
   try {
-    const { payload } = await jwtVerify(token, SECRET);
-    return payload.role === 'manager';
-  } catch { return false; }
+    const cookieStore = await cookies();
+    const token = cookieStore.get(cookieName(slug))?.value;
+    if (!token) return null;
+    const { payload } = await jwtVerify(token, secret);
+    const session = payload as unknown as TeamSession;
+    if (session.teamSlug !== slug) return null;
+    return session;
+  } catch {
+    return null;
+  }
 }
 
-export { MANAGER_COOKIE };
+export async function hashPassword(password: string): Promise<string> {
+  const encoded = new TextEncoder().encode(password);
+  const buf = await crypto.subtle.digest('SHA-256', encoded);
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+  return (await hashPassword(password)) === hash;
+}

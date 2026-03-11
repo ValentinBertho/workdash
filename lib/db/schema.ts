@@ -1,71 +1,70 @@
-import { pgTable, text, integer, boolean } from 'drizzle-orm/pg-core';
+import { pgTable, text, integer, boolean, primaryKey } from 'drizzle-orm/pg-core';
 
-export const projects = pgTable('projects', {
-  id: text('id').primaryKey(),
+export const teams = pgTable('teams', {
+  slug: text('slug').primaryKey(),
   name: text('name').notNull(),
-  priority: integer('priority').notNull().default(0),
-  status: text('status').notNull().default('en-cours'),
-  progress: integer('progress').notNull().default(0),
-  currentAction: text('current_action').notNull().default(''),
-  nextStep: text('next_step').notNull().default(''),
-  notes: text('notes'),
-  dueDate: text('due_date'),
-  updatedAt: text('updated_at').notNull(),
+  passwordHash: text('password_hash'),
+  template: text('template').notNull().default('custom'),
+  accentColor: text('accent_color').notNull().default('#ff7a59'),
+  folderCount: integer('folder_count').notNull().default(0),
+  createdAt: text('created_at').notNull(),
 });
 
-export const tasks = pgTable('tasks', {
+export const teamMembers = pgTable('team_members', {
   id: text('id').primaryKey(),
-  projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
-  label: text('label').notNull(),
-  done: boolean('done').notNull().default(false),
-  assignedBy: text('assigned_by'),
-  dueDate: text('due_date'),
+  teamSlug: text('team_slug').notNull().references(() => teams.slug, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  role: text('role').notNull().default('operator'), // admin | operator | viewer
+  canComment: boolean('can_comment').notNull().default(true),
+  token: text('token').notNull(),
+  createdAt: text('created_at').notNull(),
 });
 
-export const weeklyTodos = pgTable('weekly_todos', {
+export const workflowSteps = pgTable('workflow_steps', {
   id: text('id').primaryKey(),
-  label: text('label').notNull(),
-  done: boolean('done').notNull().default(false),
+  teamSlug: text('team_slug').notNull().references(() => teams.slug, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  color: text('color').notNull().default('#6b7280'),
   sortOrder: integer('sort_order').notNull().default(0),
 });
 
-export const comments = pgTable('comments', {
+export const folders = pgTable('folders', {
   id: text('id').primaryKey(),
-  projectId: text('project_id').notNull(),
-  author: text('author').notNull(),
-  text: text('text').notNull(),
-  createdAt: text('created_at').notNull(),
-});
-
-export const changelog = pgTable('changelog', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id'),
-  projectName: text('project_name'),
-  type: text('type').notNull(),
-  description: text('description').notNull(),
-  fromValue: text('from_value'),
-  toValue: text('to_value'),
-  createdAt: text('created_at').notNull(),
-  author: text('author').notNull(),
-});
-
-export const managerTasks = pgTable('manager_tasks', {
-  id: text('id').primaryKey(),
-  projectId: text('project_id').notNull(),
-  projectName: text('project_name').notNull(),
-  label: text('label').notNull(),
-  priority: text('priority').notNull().default('medium'),
+  ref: text('ref').notNull(),
+  teamSlug: text('team_slug').notNull().references(() => teams.slug, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  assigneeId: text('assignee_id'),
+  stepId: text('step_id'),
+  priority: integer('priority').notNull().default(0),
+  tags: text('tags').notNull().default('[]'), // JSON array
+  description: text('description'),
   dueDate: text('due_date'),
-  done: boolean('done').notNull().default(false),
+  archived: boolean('archived').notNull().default(false),
+  lastActivityAt: text('last_activity_at').notNull(),
   createdAt: text('created_at').notNull(),
-  note: text('note'),
+  updatedAt: text('updated_at').notNull(),
 });
 
-export const decisions = pgTable('decisions', {
+export const folderComments = pgTable('folder_comments', {
   id: text('id').primaryKey(),
+  folderId: text('folder_id').notNull().references(() => folders.id, { onDelete: 'cascade' }),
+  authorId: text('author_id'),
+  authorName: text('author_name').notNull(),
   text: text('text').notNull(),
-  status: text('status').notNull().default('open'),
-  resolution: text('resolution'),
   createdAt: text('created_at').notNull(),
-  updatedAt: text('updated_at'),
 });
+
+export const folderHistory = pgTable('folder_history', {
+  id: text('id').primaryKey(),
+  folderId: text('folder_id').notNull().references(() => folders.id, { onDelete: 'cascade' }),
+  actorName: text('actor_name').notNull(),
+  type: text('type').notNull(), // step_change | comment | assignment | priority_change | due_date_change
+  payload: text('payload').notNull(), // structured JSON
+  createdAt: text('created_at').notNull(),
+});
+
+export const memberFolderViews = pgTable('member_folder_views', {
+  memberId: text('member_id').notNull().references(() => teamMembers.id, { onDelete: 'cascade' }),
+  folderId: text('folder_id').notNull().references(() => folders.id, { onDelete: 'cascade' }),
+  lastViewedAt: text('last_viewed_at').notNull(),
+}, (t) => [primaryKey({ columns: [t.memberId, t.folderId] })]);

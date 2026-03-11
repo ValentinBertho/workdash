@@ -1,83 +1,89 @@
-export type Status = 'en-cours' | 'a-deployer' | 'ok' | 'bloque' | 'a-cadrer';
+export type MemberRole = 'admin' | 'operator' | 'viewer';
 
-export interface Task {
-  id: string;
-  label: string;
-  done: boolean;
-  assignedBy?: 'manager';
-  dueDate?: string;
-}
+export type HistoryEventType =
+  | 'step_change'
+  | 'comment'
+  | 'assignment'
+  | 'priority_change'
+  | 'due_date_change';
 
-export interface Project {
-  id: string;
+export type HistoryPayload =
+  | { type: 'step_change'; fromStep?: string; toStep: string }
+  | { type: 'comment'; text: string }
+  | { type: 'assignment'; fromMember?: string; toMember?: string }
+  | { type: 'priority_change'; from: number; to: number }
+  | { type: 'due_date_change'; from?: string; to?: string };
+
+export interface Team {
+  slug: string;
   name: string;
+  accentColor: string;
+  template: string;
+  hasPassword: boolean;
+  folderCount: number;
+  createdAt: string;
+}
+
+export interface TeamMember {
+  id: string;
+  teamSlug: string;
+  name: string;
+  role: MemberRole;
+  canComment: boolean;
+  createdAt: string;
+}
+
+export interface WorkflowStep {
+  id: string;
+  teamSlug: string;
+  name: string;
+  color: string;
+  sortOrder: number;
+}
+
+export interface Folder {
+  id: string;
+  ref: string;
+  teamSlug: string;
+  title: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  stepId?: string;
+  stepName?: string;
+  stepColor?: string;
   priority: number;
-  status: Status;
-  progress: number;
-  currentAction: string;
-  nextStep: string;
-  tasks: Task[];
-  notes?: string;
-  dueDate?: string; // ISO date (YYYY-MM-DD)
-}
-
-export interface Comment {
-  id: string;
-  projectId: string | 'general';
-  author: 'manager' | 'valentin';
-  text: string;
-  createdAt: string;
-}
-
-export interface WeeklyTodo {
-  id: string;
-  label: string;
-  done: boolean;
-}
-
-export interface DashboardData {
-  projects: Project[];
-  weeklyTodos: WeeklyTodo[];
-  updatedAt: string;
-}
-
-export type ChangelogEventType =
-  | 'progress_changed'
-  | 'status_changed'
-  | 'task_completed'
-  | 'task_added'
-  | 'project_added'
-  | 'todo_completed';
-
-export interface ChangelogEntry {
-  id: string;
-  projectId?: string;
-  projectName?: string;
-  type: ChangelogEventType;
-  description: string;
-  from?: string;
-  to?: string;
-  createdAt: string;
-  author: 'valentin' | 'manager' | 'system';
-}
-
-export interface ManagerTask {
-  id: string;
-  projectId: string;
-  projectName: string;
-  label: string;
-  priority: 'high' | 'medium' | 'low';
+  tags: string[];
+  description?: string;
   dueDate?: string;
-  done: boolean;
+  archived: boolean;
+  lastActivityAt: string;
   createdAt: string;
-  note?: string;
+  updatedAt: string;
+  hasUnread?: boolean;
 }
 
-export interface DecisionPoint {
+export interface FolderComment {
   id: string;
+  folderId: string;
+  authorId?: string;
+  authorName: string;
   text: string;
-  status: 'open' | 'decided' | 'deferred';
-  resolution?: string;
   createdAt: string;
-  updatedAt?: string;
+}
+
+export interface FolderHistoryEntry {
+  id: string;
+  folderId: string;
+  actorName: string;
+  type: HistoryEventType;
+  payload: HistoryPayload;
+  createdAt: string;
+}
+
+export interface TeamSession {
+  memberId: string;
+  memberName: string;
+  role: MemberRole;
+  canComment: boolean;
+  teamSlug: string;
 }
