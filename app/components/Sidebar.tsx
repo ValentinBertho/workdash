@@ -16,7 +16,8 @@ interface SidebarProps {
 function NotifBell({ slug }: { slug: string }) {
   const [notifs, setNotifs] = useState<Folder[]>([]);
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
   const fetchNotifs = async () => {
     try {
@@ -37,18 +38,31 @@ function NotifBell({ slug }: { slug: string }) {
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      const dropdown = document.getElementById('notif-dropdown');
+      if (btnRef.current && !btnRef.current.contains(target) && dropdown && !dropdown.contains(target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
+  const toggle = () => {
+    if (!open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect();
+      setDropPos({ top: rect.bottom + 6, left: rect.left });
+    }
+    setOpen(v => !v);
+  };
+
   const count = notifs.length;
 
   return (
-    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+    <div style={{ flexShrink: 0 }}>
       <button
-        onClick={() => setOpen(v => !v)}
+        ref={btnRef}
+        onClick={toggle}
         title="Notifications"
         style={{
           width: 26, height: 26, borderRadius: 7,
@@ -78,10 +92,10 @@ function NotifBell({ slug }: { slug: string }) {
         )}
       </button>
 
-      {open && (
-        <div style={{
-          position: 'absolute', top: '110%', left: 0,
-          width: 280, zIndex: 200,
+      {open && dropPos && (
+        <div id="notif-dropdown" style={{
+          position: 'fixed', top: dropPos.top, left: dropPos.left,
+          width: 280, zIndex: 9999,
           background: 'var(--surface)', border: '1px solid var(--border)',
           borderRadius: 14, boxShadow: 'var(--shadow-xl)',
           overflow: 'hidden',
