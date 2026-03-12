@@ -31,6 +31,7 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   const [myOnly, setMyOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
 
   useEffect(() => {
     fetch(`/api/teams/${slug}/folders`)
@@ -176,6 +177,27 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
             ))}
           </div>
 
+          {/* Change password */}
+          {session && (
+            <button
+              onClick={() => setShowPasswordModal(true)}
+              title="Changer mon mot de passe"
+              style={{
+                width: 32, height: 32, borderRadius: 9, border: '1px solid var(--border)',
+                background: 'var(--surface-2)', color: 'var(--text-3)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
+              }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--accent)'; e.currentTarget.style.color = 'var(--accent)'; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--border)'; e.currentTarget.style.color = 'var(--text-3)'; }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </button>
+          )}
+
           {/* New folder */}
           <button
             onClick={() => setShowNewForm(true)}
@@ -206,6 +228,13 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
           steps={steps} members={members} slug={slug}
           onClose={() => setShowNewForm(false)}
           onCreate={f => { setFolders(prev => [f, ...prev]); setShowNewForm(false); }}
+        />
+      )}
+
+      {showPasswordModal && session && (
+        <ChangePasswordModal
+          slug={slug}
+          onClose={() => setShowPasswordModal(false)}
         />
       )}
     </div>
@@ -675,6 +704,153 @@ function NewFolderModal({ steps, members, slug, onClose, onCreate }: {
             {loading ? 'Création…' : 'Créer le dossier'}
           </button>
         </form>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Change Password Modal ──────────────────────────────────── */
+function ChangePasswordModal({ slug, onClose }: { slug: string; onClose: () => void }) {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', padding: '10px 13px', borderRadius: 10,
+    border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)',
+    fontSize: '0.875rem', outline: 'none', transition: 'border-color 0.15s', boxSizing: 'border-box',
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPassword !== confirm) {
+      setError('Les mots de passe ne correspondent pas');
+      return;
+    }
+    setError('');
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/teams/${slug}/me/password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: currentPassword || undefined,
+          newPassword: newPassword || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setError(data.error ?? 'Erreur'); return; }
+      setSuccess(true);
+      setTimeout(onClose, 1400);
+    } catch {
+      setError('Erreur réseau');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="scale-in" style={{
+        background: 'var(--surface)', borderRadius: 18, padding: 28, width: '100%', maxWidth: 360,
+        border: '1px solid var(--border)', boxShadow: 'var(--shadow-xl)',
+        borderTop: '3px solid var(--accent)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <h3 style={{ fontSize: '0.95rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
+            Changer mon mot de passe
+          </h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {success ? (
+          <div style={{
+            padding: '14px', borderRadius: 10, textAlign: 'center',
+            background: '#f0fdf4', border: '1px solid #86efac', color: '#16a34a', fontSize: '0.875rem', fontWeight: 600,
+          }}>
+            Mot de passe mis à jour !
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5 }}>
+                Mot de passe actuel
+              </label>
+              <input
+                type="password"
+                value={currentPassword}
+                onChange={e => setCurrentPassword(e.target.value)}
+                placeholder="Laisser vide si aucun"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5 }}>
+                Nouveau mot de passe
+              </label>
+              <input
+                required
+                type="password"
+                value={newPassword}
+                onChange={e => setNewPassword(e.target.value)}
+                placeholder="••••••••"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+              />
+            </div>
+            <div>
+              <label style={{ display: 'block', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5 }}>
+                Confirmer
+              </label>
+              <input
+                required
+                type="password"
+                value={confirm}
+                onChange={e => setConfirm(e.target.value)}
+                placeholder="••••••••"
+                style={inputStyle}
+                onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+              />
+            </div>
+
+            {error && (
+              <div style={{
+                padding: '8px 12px', borderRadius: 8,
+                background: '#fef2f2', border: '1px solid #fca5a5',
+                fontSize: '0.78rem', color: '#dc2626', fontWeight: 500,
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="btn-primary"
+              style={{ width: '100%', padding: '11px 0', fontSize: '0.875rem', justifyContent: 'center', borderRadius: 11, marginTop: 2 }}
+            >
+              {saving ? 'Enregistrement…' : 'Enregistrer'}
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );
