@@ -111,7 +111,6 @@ export default function LandingPage() {
                 type="submit"
                 style={{
                   padding: '0 16px',
-                  borderLeft: '1px solid var(--border)',
                   background: 'var(--surface-2)',
                   color: 'var(--accent)', fontSize: '0.8rem', fontWeight: 600,
                   border: 'none', borderLeft: '1px solid var(--border)',
