@@ -2,6 +2,7 @@
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
 import { Folder, FolderComment, FolderHistoryEntry, WorkflowStep, TeamMember } from '@/types';
+import { Sidebar } from '@/app/components/Sidebar';
 
 function relTime(iso: string) {
   const m = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
@@ -9,18 +10,24 @@ function relTime(iso: string) {
   if (m < 60) return `${m}min`;
   const h = Math.floor(m / 60);
   if (h < 24) return `${h}h`;
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
 }
 
-function historyLabel(e: FolderHistoryEntry): string {
+function historyLabel(e: FolderHistoryEntry): { text: string; color: string } {
   const p = e.payload;
   switch (p.type) {
-    case 'step_change': return `${e.actorName} a changé l'étape${p.fromStep ? ` de "${p.fromStep}"` : ''} → "${p.toStep}"`;
-    case 'comment': return `${e.actorName} a commenté`;
-    case 'assignment': return p.toMember ? `${e.actorName} a assigné à ${p.toMember}` : `${e.actorName} a retiré l'assignation`;
-    case 'priority_change': return `${e.actorName} a modifié la priorité (${p.from} → ${p.to})`;
-    case 'due_date_change': return p.to ? `${e.actorName} a fixé l'échéance au ${new Date(p.to).toLocaleDateString('fr-FR')}` : `${e.actorName} a supprimé l'échéance`;
-    default: return 'Modification';
+    case 'step_change':
+      return { text: `${e.actorName} → étape "${p.toStep}"`, color: 'var(--accent)' };
+    case 'comment':
+      return { text: `${e.actorName} a commenté`, color: 'var(--text-3)' };
+    case 'assignment':
+      return { text: p.toMember ? `Assigné à ${p.toMember}` : 'Assignation retirée', color: '#d97706' };
+    case 'priority_change':
+      return { text: `Priorité modifiée (${p.from}→${p.to})`, color: 'var(--text-3)' };
+    case 'due_date_change':
+      return { text: p.to ? `Échéance fixée au ${new Date(p.to).toLocaleDateString('fr-FR')}` : 'Échéance supprimée', color: '#dc2626' };
+    default:
+      return { text: 'Modification', color: 'var(--text-3)' };
   }
 }
 
@@ -36,8 +43,8 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
   const [editMode, setEditMode] = useState(false);
   const [comment, setComment] = useState('');
   const [sending, setSending] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
 
-  // Edit state
   const [editTitle, setEditTitle] = useState('');
   const [editStep, setEditStep] = useState('');
   const [editAssignee, setEditAssignee] = useState('');
@@ -65,8 +72,6 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
         setEditTags((folderData.folder.tags ?? []).join(', '));
       }
     }).finally(() => setLoading(false));
-
-    // Mark as viewed
     fetch(`/api/teams/${slug}/folders/${id}/view`, { method: 'POST' });
   }, [slug, id]);
 
@@ -75,14 +80,7 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
     const res = await fetch(`/api/teams/${slug}/folders/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        title: editTitle,
-        stepId: editStep || null,
-        assigneeId: editAssignee || null,
-        dueDate: editDue || null,
-        description: editDesc || null,
-        tags,
-      }),
+      body: JSON.stringify({ title: editTitle, stepId: editStep || null, assigneeId: editAssignee || null, dueDate: editDue || null, description: editDesc || null, tags }),
     });
     const data = await res.json();
     if (res.ok) { setFolder(data.folder); setEditMode(false); }
@@ -110,209 +108,454 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
     window.location.href = `/team/${slug}`;
   };
 
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 10,
+    border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)',
+    fontSize: '0.85rem', outline: 'none', transition: 'border-color 0.15s',
+  };
+
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center"><p className="text-sm" style={{ color: 'var(--text-3)' }}>Chargement…</p></div>;
+    return (
+      <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
+        <Sidebar slug={slug} active="folder" members={[]} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+            <div className="spinner" />
+            <p style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>Chargement…</p>
+          </div>
+        </div>
+      </div>
+    );
   }
+
   if (!folder) {
-    return <div className="min-h-screen flex items-center justify-center"><p className="text-sm" style={{ color: 'var(--text-3)' }}>Dossier introuvable.</p></div>;
+    return (
+      <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
+        <Sidebar slug={slug} active="folder" members={[]} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <p style={{ color: 'var(--text-3)' }}>Dossier introuvable.</p>
+        </div>
+      </div>
+    );
   }
+
+  const isOverdue = folder.dueDate && new Date(folder.dueDate) < new Date();
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      {/* Header */}
-      <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ borderTop: '3px solid var(--accent)' }} />
-        <div style={{ maxWidth: 1100, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 8, height: 52 }}>
-          <Link href="/" className="font-bold text-sm" style={{ color: 'var(--text)', textDecoration: 'none' }}>
-            Work<span style={{ color: 'var(--accent)' }}>Dash</span>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+      <Sidebar slug={slug} active="folder" members={members} />
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Top bar */}
+        <header style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          padding: '0 20px', height: 52, flexShrink: 0,
+          background: 'var(--surface)', borderBottom: '1px solid var(--border)', zIndex: 30,
+        }}>
+          <Link
+            href={`/team/${slug}`}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 5,
+              fontSize: '0.78rem', color: 'var(--text-3)', textDecoration: 'none',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => (e.currentTarget.style.color = 'var(--text)')}
+            onMouseLeave={e => (e.currentTarget.style.color = 'var(--text-3)')}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M15 18l-6-6 6-6" />
+            </svg>
+            Dossiers
           </Link>
-          <span style={{ color: 'var(--text-3)' }}>/</span>
-          <Link href={`/team/${slug}`} className="text-sm" style={{ color: 'var(--text-3)', textDecoration: 'none' }}>{slug}</Link>
-          <span style={{ color: 'var(--text-3)' }}>/</span>
-          <span className="text-sm font-mono" style={{ color: 'var(--text-3)' }}>{folder.ref}</span>
+          <span style={{ color: 'var(--border-2)' }}>/</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.75rem', color: 'var(--text-3)', fontWeight: 500 }}>
+            {folder.ref}
+          </span>
+          {folder.stepName && (
+            <span className="step-pill" style={{
+              background: `color-mix(in srgb, ${folder.stepColor} 12%, var(--surface))`,
+              color: folder.stepColor,
+            }}>
+              <span className="step-dot" style={{ background: folder.stepColor, width: 5, height: 5 }} />
+              {folder.stepName}
+            </span>
+          )}
+
           <div style={{ flex: 1 }} />
+
+          <button
+            onClick={() => setShowHistory(h => !h)}
+            className="btn-ghost"
+            style={{ fontSize: '0.75rem', padding: '5px 11px' }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M12 8v4l3 3m6-3a9 9 0 1 1-18 0 9 9 0 0 1 18 0z" />
+            </svg>
+            Historique
+          </button>
           <button
             onClick={() => setEditMode(!editMode)}
-            className="text-xs px-3 py-1.5 rounded-lg border"
-            style={{ borderColor: editMode ? 'var(--accent)' : 'var(--border)', color: editMode ? 'var(--accent)' : 'var(--text-3)', background: 'none' }}
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '5px 12px', borderRadius: 8, border: 'none',
+              background: editMode ? 'var(--accent-light)' : 'var(--surface-2)',
+              color: editMode ? 'var(--accent)' : 'var(--text-3)',
+              fontSize: '0.78rem', fontWeight: editMode ? 600 : 400,
+              transition: 'all 0.15s',
+            }}
           >
-            {editMode ? '✕ Annuler' : '✎ Modifier'}
-          </button>
-          <button onClick={archive} className="text-xs px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--border)', color: 'var(--text-3)' }}>
-            Archiver
-          </button>
-        </div>
-      </header>
-
-      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 20px', display: 'grid', gridTemplateColumns: '1fr 300px', gap: 20, alignItems: 'start' }}>
-
-        {/* Left — main */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {/* Metadata card */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px' }}>
             {editMode ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <input value={editTitle} onChange={e => setEditTitle(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm border outline-none font-semibold"
-                  style={{ borderColor: 'var(--accent)', background: 'var(--surface-2)', color: 'var(--text)', fontSize: '1.1rem' }} />
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Étape</label>
-                    <select value={editStep} onChange={e => setEditStep(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
-                      style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}>
-                      <option value="">Sans étape</option>
-                      {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Responsable</label>
-                    <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
-                      style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}>
-                      <option value="">Non assigné</option>
-                      {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Échéance</label>
-                    <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
-                      className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
-                      style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Tags (séparés par virgule)</label>
-                    <input value={editTags} onChange={e => setEditTags(e.target.value)}
-                      placeholder="urgent, client, contrat…"
-                      className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
-                      style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold mb-1" style={{ color: 'var(--text-3)' }}>Description</label>
-                  <textarea value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={4}
-                    className="w-full px-3 py-2 rounded-lg text-sm border outline-none resize-none"
-                    style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }} />
-                </div>
-                <button onClick={saveEdit}
-                  className="px-4 py-2 rounded-xl font-semibold text-white text-sm"
-                  style={{ background: 'var(--accent)', alignSelf: 'flex-start' }}>
-                  Enregistrer
-                </button>
-              </div>
+              <>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+                Annuler
+              </>
             ) : (
               <>
-                <div className="flex items-start gap-3 mb-4">
-                  <div style={{ flex: 1 }}>
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="font-mono text-xs" style={{ color: 'var(--text-3)' }}>{folder.ref}</span>
-                      {folder.stepName && (
-                        <span className="flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: folder.stepColor + '22', color: folder.stepColor }}>
-                          <span className="step-dot" style={{ background: folder.stepColor, width: 6, height: 6 }} />
-                          {folder.stepName}
-                        </span>
-                      )}
-                    </div>
-                    <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text)', lineHeight: 1.3 }}>{folder.title}</h1>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm mb-4">
-                  <Meta label="Responsable">{folder.assigneeName ?? '—'}</Meta>
-                  <Meta label="Échéance">
-                    {folder.dueDate
-                      ? <span style={{ color: new Date(folder.dueDate) < new Date() ? '#ef4444' : 'var(--text)' }}>
-                          {new Date(folder.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                        </span>
-                      : '—'}
-                  </Meta>
-                </div>
-                {folder.tags.length > 0 && (
-                  <div className="flex gap-1.5 flex-wrap mb-4">
-                    {folder.tags.map(t => (
-                      <span key={t} className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-light)', color: 'var(--accent)' }}>{t}</span>
-                    ))}
-                  </div>
-                )}
-                {folder.description && (
-                  <p style={{ fontSize: '0.85rem', color: 'var(--text-2)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{folder.description}</p>
-                )}
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Modifier
               </>
             )}
-          </div>
+          </button>
+          <button
+            onClick={archive}
+            className="btn-ghost"
+            style={{ fontSize: '0.75rem', padding: '5px 11px', color: '#dc2626', borderColor: '#fca5a5' }}
+          >
+            Archiver
+          </button>
+        </header>
 
-          {/* Comments */}
-          <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px' }}>
-            <h2 className="font-semibold text-sm mb-4" style={{ color: 'var(--text)' }}>
-              Discussion ({comments.length})
-            </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-              {comments.length === 0 && (
-                <p className="text-xs text-center py-6" style={{ color: 'var(--text-3)' }}>Aucun commentaire pour l&apos;instant.</p>
-              )}
-              {comments.map(c => (
-                <div key={c.id} style={{ display: 'flex', gap: 10 }}>
-                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent)' }}>
-                    {c.authorName.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text)' }}>{c.authorName}</span>
-                      <span style={{ fontSize: '0.68rem', color: 'var(--text-3)' }}>{relTime(c.createdAt)}</span>
-                    </div>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text-2)', lineHeight: 1.5, background: 'var(--surface-2)', borderRadius: '4px 12px 12px 12px', padding: '8px 12px' }}>{c.text}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <input
-                value={comment}
-                onChange={e => setComment(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendComment()}
-                placeholder="Ajouter un commentaire…"
-                className="flex-1 px-3 py-2 rounded-lg text-sm border outline-none"
-                style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}
-              />
-              <button
-                onClick={sendComment}
-                disabled={sending || !comment.trim()}
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: 'var(--accent)' }}
+        {/* Content */}
+        <div style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: showHistory ? '1fr 300px' : '1fr',
+            gap: 16, maxWidth: 1100, margin: '0 auto', alignItems: 'start',
+          }}>
+
+            {/* Left column */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+              {/* Main card */}
+              <div
+                className="slide-up"
+                style={{
+                  background: 'var(--surface)', borderRadius: 16, padding: '22px',
+                  border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)',
+                  borderTop: folder.stepColor ? `3px solid ${folder.stepColor}` : '1px solid var(--border)',
+                }}
               >
-                {sending ? '…' : '→'}
-              </button>
-            </div>
-          </div>
-        </div>
+                {editMode ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    <input
+                      value={editTitle}
+                      onChange={e => setEditTitle(e.target.value)}
+                      style={{ ...inputStyle, fontSize: '1.05rem', fontWeight: 700, letterSpacing: '-0.02em' }}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                    />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <FieldGroup label="Étape">
+                        <select value={editStep} onChange={e => setEditStep(e.target.value)} style={inputStyle}>
+                          <option value="">Sans étape</option>
+                          {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </FieldGroup>
+                      <FieldGroup label="Responsable">
+                        <select value={editAssignee} onChange={e => setEditAssignee(e.target.value)} style={inputStyle}>
+                          <option value="">Non assigné</option>
+                          {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                        </select>
+                      </FieldGroup>
+                      <FieldGroup label="Échéance">
+                        <input type="date" value={editDue} onChange={e => setEditDue(e.target.value)}
+                          style={inputStyle}
+                          onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                        />
+                      </FieldGroup>
+                      <FieldGroup label="Tags (virgule)">
+                        <input value={editTags} onChange={e => setEditTags(e.target.value)}
+                          placeholder="urgent, client…"
+                          style={inputStyle}
+                          onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                          onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                        />
+                      </FieldGroup>
+                    </div>
+                    <FieldGroup label="Description">
+                      <textarea
+                        value={editDesc} onChange={e => setEditDesc(e.target.value)} rows={4}
+                        style={{ ...inputStyle, resize: 'none', lineHeight: 1.6 }}
+                        onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                        onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                      />
+                    </FieldGroup>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={saveEdit}
+                        className="btn-primary"
+                        style={{ padding: '8px 20px' }}
+                      >
+                        Enregistrer
+                      </button>
+                      <button
+                        onClick={() => setEditMode(false)}
+                        className="btn-ghost"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {/* Header */}
+                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.72rem', color: 'var(--text-4)', fontWeight: 500 }}>
+                            {folder.ref}
+                          </span>
+                          {folder.hasUnread && <span className="unread-dot" />}
+                        </div>
+                        <h1 style={{
+                          fontSize: '1.3rem', fontWeight: 800, color: 'var(--text)',
+                          lineHeight: 1.25, letterSpacing: '-0.03em',
+                        }}>
+                          {folder.title}
+                        </h1>
+                      </div>
+                    </div>
 
-        {/* Right — history */}
-        <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '16px', position: 'sticky', top: 72 }}>
-          <h2 className="font-semibold text-sm mb-4" style={{ color: 'var(--text)' }}>Historique</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {history.length === 0 && (
-              <p className="text-xs" style={{ color: 'var(--text-3)' }}>Aucune activité.</p>
-            )}
-            {history.map((e, i) => (
-              <div key={e.id} style={{ display: 'flex', gap: 8, paddingBottom: i < history.length - 1 ? 12 : 0, borderLeft: i < history.length - 1 ? '1px solid var(--border)' : 'none', marginLeft: 7, paddingLeft: 14, position: 'relative' }}>
-                <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--border-2)', position: 'absolute', left: -3.5, top: 6 }} />
-                <div>
-                  <p style={{ fontSize: '0.75rem', color: 'var(--text-2)', lineHeight: 1.4 }}>{historyLabel(e)}</p>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: 2 }}>{relTime(e.createdAt)}</p>
+                    {/* Meta grid */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14, marginBottom: 16 }}>
+                      <MetaBlock label="Responsable">
+                        {folder.assigneeName ? (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 4 }}>
+                            <div className="avatar" style={{ width: 24, height: 24, fontSize: '0.65rem', borderRadius: 6 }}>
+                              {folder.assigneeName.slice(0, 1).toUpperCase()}
+                            </div>
+                            <span style={{ fontSize: '0.85rem', color: 'var(--text)' }}>{folder.assigneeName}</span>
+                          </div>
+                        ) : <span style={{ color: 'var(--text-4)', fontSize: '0.85rem' }}>—</span>}
+                      </MetaBlock>
+
+                      <MetaBlock label="Échéance">
+                        {folder.dueDate ? (
+                          <span style={{ fontSize: '0.88rem', fontWeight: 500, color: isOverdue ? '#dc2626' : 'var(--text)', marginTop: 4, display: 'block' }}>
+                            {isOverdue && '⚠ '}
+                            {new Date(folder.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                          </span>
+                        ) : <span style={{ color: 'var(--text-4)', fontSize: '0.85rem' }}>—</span>}
+                      </MetaBlock>
+
+                      <MetaBlock label="Priorité">
+                        <PriorityDisplay priority={folder.priority} />
+                      </MetaBlock>
+                    </div>
+
+                    {/* Tags */}
+                    {folder.tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
+                        {folder.tags.map(t => (
+                          <span key={t} className="tag">{t}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Description */}
+                    {folder.description && (
+                      <div style={{
+                        padding: '14px 16px', borderRadius: 10,
+                        background: 'var(--surface-2)', border: '1px solid var(--border)',
+                      }}>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-2)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                          {folder.description}
+                        </p>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Comments */}
+              <div
+                className="slide-up stagger-1"
+                style={{
+                  background: 'var(--surface)', borderRadius: 16, padding: '20px',
+                  border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)',
+                }}
+              >
+                <h2 style={{
+                  fontSize: '0.82rem', fontWeight: 700, color: 'var(--text)',
+                  letterSpacing: '-0.01em', marginBottom: 16,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  Discussion
+                  <span style={{
+                    fontSize: '0.65rem', padding: '1px 7px', borderRadius: 'var(--r-full)',
+                    background: 'var(--surface-2)', color: 'var(--text-3)', fontWeight: 600,
+                  }}>
+                    {comments.length}
+                  </span>
+                </h2>
+
+                {/* Comment list */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+                  {comments.length === 0 && (
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-4)', textAlign: 'center', padding: '20px 0' }}>
+                      Aucun commentaire pour l&apos;instant.
+                    </p>
+                  )}
+                  {comments.map(c => (
+                    <div key={c.id} style={{ display: 'flex', gap: 10 }}>
+                      <div className="avatar" style={{ width: 30, height: 30, fontSize: '0.72rem', borderRadius: 8, flexShrink: 0 }}>
+                        {c.authorName.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 5 }}>
+                          <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>{c.authorName}</span>
+                          <span style={{ fontSize: '0.68rem', color: 'var(--text-4)' }}>{relTime(c.createdAt)}</span>
+                        </div>
+                        <div style={{
+                          background: 'var(--surface-2)', borderRadius: '4px 12px 12px 12px',
+                          padding: '9px 13px', border: '1px solid var(--border)',
+                        }}>
+                          <p style={{ fontSize: '0.83rem', color: 'var(--text-2)', lineHeight: 1.55 }}>{c.text}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Comment input */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={comment}
+                    onChange={e => setComment(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendComment()}
+                    placeholder="Ajouter un commentaire… (Entrée pour envoyer)"
+                    style={{
+                      flex: 1, padding: '9px 13px', borderRadius: 10,
+                      border: '1px solid var(--border)', background: 'var(--surface-2)',
+                      color: 'var(--text)', fontSize: '0.83rem', outline: 'none',
+                      transition: 'border-color 0.15s',
+                    }}
+                    onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                    onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                  />
+                  <button
+                    onClick={sendComment}
+                    disabled={sending || !comment.trim()}
+                    className="btn-primary"
+                    style={{ padding: '9px 16px', flexShrink: 0 }}
+                  >
+                    {sending ? '…' : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <path d="M22 2 11 13M22 2 15 22 11 13 2 9 22 2z" />
+                      </svg>
+                    )}
+                  </button>
                 </div>
               </div>
-            ))}
+            </div>
+
+            {/* Right — history */}
+            {showHistory && (
+              <div
+                className="slide-up stagger-2"
+                style={{
+                  background: 'var(--surface)', borderRadius: 16, padding: '18px',
+                  border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)',
+                  position: 'sticky', top: 20,
+                }}
+              >
+                <h2 style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em', marginBottom: 16 }}>
+                  Historique
+                </h2>
+                <div style={{ position: 'relative' }}>
+                  {history.length === 0 && (
+                    <p style={{ fontSize: '0.75rem', color: 'var(--text-4)' }}>Aucune activité.</p>
+                  )}
+                  {history.map((e, i) => {
+                    const { text, color } = historyLabel(e);
+                    return (
+                      <div
+                        key={e.id}
+                        style={{
+                          display: 'flex', gap: 10,
+                          paddingBottom: i < history.length - 1 ? 14 : 0,
+                          position: 'relative',
+                        }}
+                      >
+                        {/* Timeline line */}
+                        {i < history.length - 1 && (
+                          <div style={{
+                            position: 'absolute', left: 6, top: 14, bottom: -2,
+                            width: 1, background: 'var(--border)',
+                          }} />
+                        )}
+                        {/* Dot */}
+                        <div style={{
+                          width: 13, height: 13, borderRadius: '50%',
+                          background: 'var(--surface)', border: `2px solid ${color}`,
+                          flexShrink: 0, marginTop: 2, zIndex: 1,
+                        }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--text-2)', lineHeight: 1.45 }}>{text}</p>
+                          <p style={{ fontSize: '0.65rem', color: 'var(--text-4)', marginTop: 2 }}>{relTime(e.createdAt)}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
 
-function Meta({ label, children }: { label: string; children: React.ReactNode }) {
+function FieldGroup({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: 'var(--text-3)' }}>{label}</p>
-      <p style={{ color: 'var(--text)' }}>{children}</p>
+      <label style={{
+        display: 'block', fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-3)',
+        textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5,
+      }}>
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function MetaBlock({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div style={{ padding: '10px 12px', borderRadius: 10, background: 'var(--surface-2)', border: '1px solid var(--border)' }}>
+      <p style={{ fontSize: '0.62rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+        {label}
+      </p>
+      <div style={{ marginTop: 3 }}>{children}</div>
+    </div>
+  );
+}
+
+function PriorityDisplay({ priority }: { priority: number }) {
+  const color = priority >= 70 ? '#dc2626' : priority >= 40 ? '#d97706' : '#16a34a';
+  const label = priority >= 70 ? 'Haute' : priority >= 40 ? 'Moyenne' : 'Faible';
+  const pct = Math.max(5, priority);
+  return (
+    <div style={{ marginTop: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+        <span style={{ width: 6, height: 6, borderRadius: '50%', background: color, display: 'inline-block' }} />
+        <span style={{ fontSize: '0.83rem', fontWeight: 500, color }}>{label}</span>
+      </div>
+      <div style={{ height: 3, background: 'var(--border)', borderRadius: 'var(--r-full)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 'var(--r-full)', transition: 'width 0.6s var(--ease-spring)' }} />
+      </div>
     </div>
   );
 }

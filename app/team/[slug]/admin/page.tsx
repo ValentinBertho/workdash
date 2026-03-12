@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, use } from 'react';
-import Link from 'next/link';
 import { WorkflowStep, TeamMember, MemberRole } from '@/types';
+import { Sidebar } from '@/app/components/Sidebar';
 
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#f97316', '#6b7280'];
 const ROLES: { value: MemberRole; label: string; desc: string }[] = [
@@ -19,7 +19,7 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
   const [accentColor, setAccentColor] = useState('#4f46e5');
   const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState('');
+  const [toast, setToast] = useState('');
 
   useEffect(() => {
     Promise.all([
@@ -30,13 +30,17 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
       setSteps(s.steps ?? []);
       setMembers(m.members ?? []);
       setTeamName(t.team?.name ?? '');
-      setAccentColor(t.team?.accentColor ?? '#4f46e5');
+      const color = t.team?.accentColor ?? '#4f46e5';
+      setAccentColor(color);
+      document.documentElement.style.setProperty('--accent', color);
     }).finally(() => setLoading(false));
   }, [slug]);
 
-  const flash = (msg: string) => { setSaved(msg); setTimeout(() => setSaved(''), 2000); };
+  const flash = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(''), 2500);
+  };
 
-  // Steps
   const addStep = async () => {
     const name = prompt('Nom de l\'étape');
     if (!name?.trim()) return;
@@ -63,7 +67,6 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
     flash('Étape supprimée');
   };
 
-  // Members
   const addMember = async () => {
     const name = prompt('Nom du membre');
     if (!name?.trim()) return;
@@ -81,7 +84,7 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
       body: JSON.stringify(updates),
     });
     setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updates } : m));
-    flash('Membre mis à jour');
+    flash('Mis à jour');
   };
 
   const deleteMember = async (id: string) => {
@@ -91,8 +94,8 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
     flash('Membre supprimé');
   };
 
-  // Settings
   const saveSettings = async () => {
+    document.documentElement.style.setProperty('--accent', accentColor);
     await fetch(`/api/teams/${slug}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: teamName, accentColor, password: newPassword || undefined }),
@@ -101,152 +104,342 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
     flash('Paramètres sauvegardés');
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-sm" style={{ color: 'var(--text-3)' }}>Chargement…</p></div>;
+  const inputStyle = {
+    width: '100%', padding: '9px 12px', borderRadius: 10,
+    border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)',
+    fontSize: '0.85rem', outline: 'none', transition: 'border-color 0.15s',
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', height: '100vh', background: 'var(--bg)' }}>
+        <Sidebar slug={slug} active="admin" members={[]} />
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="spinner" />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)' }}>
-      <header style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 40 }}>
-        <div style={{ borderTop: '3px solid var(--accent)' }} />
-        <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 20px', display: 'flex', alignItems: 'center', gap: 8, height: 52 }}>
-          <Link href={`/team/${slug}`} className="text-sm" style={{ color: 'var(--text-3)', textDecoration: 'none' }}>← {slug}</Link>
-          <span style={{ color: 'var(--text-3)' }}>/</span>
-          <span className="text-sm font-semibold" style={{ color: 'var(--text)' }}>Admin</span>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
+      <Sidebar slug={slug} active="admin" members={members} />
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        {/* Top bar */}
+        <header style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '0 20px', height: 52, flexShrink: 0,
+          background: 'var(--surface)', borderBottom: '1px solid var(--border)', zIndex: 30,
+        }}>
+          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+            Administration
+          </span>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>·</span>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>{teamName || slug}</span>
           <div style={{ flex: 1 }} />
-          {saved && <span className="text-xs font-medium text-green-600">{saved}</span>}
-        </div>
-      </header>
+          {toast && (
+            <span className="fade-in" style={{
+              fontSize: '0.75rem', fontWeight: 600, color: '#16a34a',
+              background: '#f0fdf4', padding: '4px 10px', borderRadius: 8, border: '1px solid #bbf7d0',
+            }}>
+              ✓ {toast}
+            </span>
+          )}
+        </header>
 
-      <main style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 p-1 rounded-xl inline-flex" style={{ background: 'var(--surface)', border: '1px solid var(--border)' }}>
-          {(['steps', 'members', 'settings'] as const).map(t => (
-            <button key={t} onClick={() => setTab(t)}
-              className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              style={{ background: tab === t ? 'var(--accent)' : 'transparent', color: tab === t ? 'white' : 'var(--text-3)' }}>
-              {t === 'steps' ? 'Étapes' : t === 'members' ? 'Membres' : 'Paramètres'}
-            </button>
-          ))}
-        </div>
+        {/* Content */}
+        <main style={{ flex: 1, overflow: 'auto', padding: 20 }}>
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
 
-        {/* Steps */}
-        {tab === 'steps' && (
-          <Section title="Workflow — étapes" action={<Btn onClick={addStep}>+ Ajouter</Btn>}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {steps.map((s, i) => (
-                <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {COLORS.map(c => (
-                      <button key={c} onClick={() => updateStep(s.id, { color: c })}
-                        style={{ width: 16, height: 16, borderRadius: '50%', background: c, border: s.color === c ? '2px solid var(--text)' : '2px solid transparent', cursor: 'pointer' }} />
-                    ))}
-                  </div>
-                  <span className="step-dot" style={{ background: s.color }} />
-                  <input
-                    value={s.name}
-                    onChange={e => setSteps(prev => prev.map(x => x.id === s.id ? { ...x, name: e.target.value } : x))}
-                    onBlur={e => updateStep(s.id, { name: e.target.value })}
-                    className="flex-1 text-sm font-medium outline-none bg-transparent"
-                    style={{ color: 'var(--text)' }}
-                  />
-                  <span className="text-xs" style={{ color: 'var(--text-3)' }}>#{i + 1}</span>
-                  <button onClick={() => deleteStep(s.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
-                </div>
-              ))}
-              {steps.length === 0 && <p className="text-sm text-center py-6" style={{ color: 'var(--text-3)' }}>Aucune étape. Cliquez sur "+ Ajouter" pour commencer.</p>}
-            </div>
-          </Section>
-        )}
-
-        {/* Members */}
-        {tab === 'members' && (
-          <Section title="Membres de l'équipe" action={<Btn onClick={addMember}>+ Ajouter</Btn>}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {members.map(m => (
-                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 12, padding: '12px 16px' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--accent-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>
-                    {m.name.slice(0, 1).toUpperCase()}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)' }}>{m.name}</p>
-                  </div>
-                  <select
-                    value={m.role}
-                    onChange={e => updateMember(m.id, { role: e.target.value as MemberRole })}
-                    className="text-xs border rounded-lg px-2 py-1 outline-none"
-                    style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }}
-                  >
-                    {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                  </select>
-                  <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: 'var(--text-3)' }}>
-                    <input type="checkbox" checked={m.canComment} onChange={e => updateMember(m.id, { canComment: e.target.checked })} className="accent-[var(--accent)]" />
-                    Commenter
-                  </label>
-                  <button onClick={() => deleteMember(m.id)} style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1rem', lineHeight: 1 }}>×</button>
-                </div>
+            {/* Tab bar */}
+            <div
+              className="slide-up"
+              style={{
+                display: 'inline-flex', marginBottom: 20,
+                background: 'var(--surface)', border: '1px solid var(--border)',
+                borderRadius: 12, padding: 4, gap: 2,
+                boxShadow: 'var(--shadow-xs)',
+              }}
+            >
+              {(['steps', 'members', 'settings'] as const).map(t => (
+                <button
+                  key={t}
+                  onClick={() => setTab(t)}
+                  style={{
+                    padding: '7px 16px', borderRadius: 9, border: 'none',
+                    background: tab === t ? 'var(--accent)' : 'transparent',
+                    color: tab === t ? 'white' : 'var(--text-3)',
+                    fontSize: '0.8rem', fontWeight: tab === t ? 600 : 400,
+                    transition: 'all 0.18s',
+                    letterSpacing: tab === t ? '-0.01em' : '0',
+                  }}
+                >
+                  {t === 'steps' ? 'Étapes' : t === 'members' ? 'Membres' : 'Paramètres'}
+                </button>
               ))}
             </div>
-            <div className="mt-4 p-4 rounded-xl" style={{ background: 'var(--accent-light)', border: '1px solid var(--accent-border)' }}>
-              <p className="text-xs font-semibold mb-1" style={{ color: 'var(--accent)' }}>Lien d&apos;invitation</p>
-              <p className="font-mono text-xs" style={{ color: 'var(--text-2)', wordBreak: 'break-all' }}>
-                {typeof window !== 'undefined' ? `${window.location.origin}/team/${slug}` : `/team/${slug}`}
-              </p>
-            </div>
-          </Section>
-        )}
 
-        {/* Settings */}
-        {tab === 'settings' && (
-          <Section title="Paramètres de l'équipe" action={<Btn onClick={saveSettings}>Enregistrer</Btn>}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>Nom de l&apos;équipe</label>
-                <input value={teamName} onChange={e => setTeamName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
-                  style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }} />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-3)' }}>Couleur d&apos;accent</label>
-                <div className="flex gap-2 flex-wrap">
-                  {COLORS.map(c => (
-                    <button key={c} type="button" onClick={() => setAccentColor(c)}
-                      style={{ width: 32, height: 32, borderRadius: '50%', background: c, border: accentColor === c ? '3px solid var(--text)' : '3px solid transparent', cursor: 'pointer', transition: 'transform 0.15s', transform: accentColor === c ? 'scale(1.2)' : 'scale(1)' }} />
+            {/* Steps */}
+            {tab === 'steps' && (
+              <AdminSection
+                title="Workflow — étapes"
+                subtitle="Définissez les étapes que traversent vos dossiers."
+                action={<button onClick={addStep} className="btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem' }}>+ Ajouter</button>}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {steps.map((s, i) => (
+                    <div
+                      key={s.id}
+                      className="slide-up"
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        background: 'var(--surface-2)', border: '1px solid var(--border)',
+                        borderLeft: `3px solid ${s.color}`,
+                        borderRadius: 12, padding: '12px 14px',
+                        transition: 'box-shadow 0.15s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.boxShadow = 'var(--shadow-sm)')}
+                      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
+                    >
+                      {/* Color swatches */}
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 112 }}>
+                        {COLORS.map(c => (
+                          <button
+                            key={c}
+                            onClick={() => updateStep(s.id, { color: c })}
+                            style={{
+                              width: 14, height: 14, borderRadius: '50%', background: c,
+                              border: s.color === c ? '2px solid var(--text)' : '2px solid transparent',
+                              cursor: 'pointer', transition: 'transform 0.1s',
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.transform = 'scale(1.25)')}
+                            onMouseLeave={e => (e.currentTarget.style.transform = 'scale(1)')}
+                          />
+                        ))}
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7, flex: 1 }}>
+                        <span className="step-dot" style={{ background: s.color }} />
+                        <input
+                          value={s.name}
+                          onChange={e => setSteps(prev => prev.map(x => x.id === s.id ? { ...x, name: e.target.value } : x))}
+                          onBlur={e => updateStep(s.id, { name: e.target.value })}
+                          style={{
+                            flex: 1, fontSize: '0.88rem', fontWeight: 600, outline: 'none',
+                            background: 'transparent', border: 'none', color: 'var(--text)',
+                          }}
+                        />
+                      </div>
+
+                      <span style={{ fontSize: '0.68rem', color: 'var(--text-4)', fontFamily: 'var(--font-mono)' }}>
+                        #{i + 1}
+                      </span>
+                      <button
+                        onClick={() => deleteStep(s.id)}
+                        style={{
+                          width: 24, height: 24, borderRadius: 6, border: 'none',
+                          background: 'transparent', color: 'var(--text-4)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '1.1rem', transition: 'background 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-4)'; }}
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                  {steps.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-4)', fontSize: '0.82rem' }}>
+                      Aucune étape. Cliquez sur <strong>+ Ajouter</strong> pour commencer.
+                    </div>
+                  )}
+                </div>
+              </AdminSection>
+            )}
+
+            {/* Members */}
+            {tab === 'members' && (
+              <AdminSection
+                title="Membres de l'équipe"
+                subtitle="Gérez les accès et les rôles de chaque membre."
+                action={<button onClick={addMember} className="btn-primary" style={{ padding: '6px 14px', fontSize: '0.78rem' }}>+ Ajouter</button>}
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {members.map(m => (
+                    <div
+                      key={m.id}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 12,
+                        background: 'var(--surface-2)', border: '1px solid var(--border)',
+                        borderRadius: 12, padding: '11px 14px',
+                      }}
+                    >
+                      <div className="avatar" style={{ width: 34, height: 34, fontSize: '0.8rem', borderRadius: 9 }}>
+                        {m.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>{m.name}</p>
+                        <p style={{ fontSize: '0.68rem', color: 'var(--text-4)', marginTop: 1 }}>
+                          Depuis le {new Date(m.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                        </p>
+                      </div>
+                      <select
+                        value={m.role}
+                        onChange={e => updateMember(m.id, { role: e.target.value as MemberRole })}
+                        style={{
+                          padding: '5px 9px', borderRadius: 8, fontSize: '0.75rem',
+                          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
+                          outline: 'none', cursor: 'pointer',
+                        }}
+                      >
+                        {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                      </select>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: 'var(--text-3)', cursor: 'pointer', userSelect: 'none' }}>
+                        <input
+                          type="checkbox" checked={m.canComment}
+                          onChange={e => updateMember(m.id, { canComment: e.target.checked })}
+                          style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                        />
+                        Commenter
+                      </label>
+                      <button
+                        onClick={() => deleteMember(m.id)}
+                        style={{
+                          width: 26, height: 26, borderRadius: 7, border: 'none',
+                          background: 'transparent', color: 'var(--text-4)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '1.1rem', transition: 'background 0.15s, color 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-4)'; }}
+                      >
+                        ×
+                      </button>
+                    </div>
                   ))}
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: 'var(--text-3)' }}>
-                  Nouveau mot de passe <span style={{ opacity: 0.5 }}>(laisser vide pour ne pas changer)</span>
-                </label>
-                <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3 py-2 rounded-lg text-sm border outline-none"
-                  style={{ borderColor: 'var(--border)', background: 'var(--surface-2)', color: 'var(--text)' }} />
-              </div>
-            </div>
-          </Section>
-        )}
-      </main>
+
+                {/* Invitation link */}
+                <div style={{
+                  marginTop: 16, padding: '14px 16px', borderRadius: 12,
+                  background: 'var(--accent-light)', border: '1px solid var(--accent-border)',
+                }}>
+                  <p style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5 }}>
+                    Lien d&apos;invitation
+                  </p>
+                  <p style={{ fontFamily: 'var(--font-mono)', fontSize: '0.78rem', color: 'var(--text-2)', wordBreak: 'break-all' }}>
+                    {typeof window !== 'undefined' ? `${window.location.origin}/team/${slug}` : `/team/${slug}`}
+                  </p>
+                </div>
+              </AdminSection>
+            )}
+
+            {/* Settings */}
+            {tab === 'settings' && (
+              <AdminSection
+                title="Paramètres de l'équipe"
+                subtitle="Personnalisez l'identité visuelle et la sécurité."
+                action={
+                  <button onClick={saveSettings} className="btn-primary" style={{ padding: '6px 16px', fontSize: '0.78rem' }}>
+                    Enregistrer
+                  </button>
+                }
+              >
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 7 }}>
+                      Nom de l&apos;équipe
+                    </label>
+                    <input
+                      value={teamName}
+                      onChange={e => setTeamName(e.target.value)}
+                      style={inputStyle}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>
+                      Couleur d&apos;accent
+                    </label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {COLORS.map(c => (
+                        <button
+                          key={c}
+                          onClick={() => {
+                            setAccentColor(c);
+                            document.documentElement.style.setProperty('--accent', c);
+                          }}
+                          style={{
+                            width: 34, height: 34, borderRadius: '50%', background: c,
+                            border: accentColor === c ? '3px solid var(--text)' : '3px solid transparent',
+                            transition: 'transform 0.15s, border-color 0.15s',
+                            transform: accentColor === c ? 'scale(1.2)' : 'scale(1)',
+                            boxShadow: accentColor === c ? `0 0 0 2px var(--surface), 0 0 0 4px ${c}` : 'none',
+                            cursor: 'pointer',
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 36, height: 36, borderRadius: 10, background: accentColor, boxShadow: 'var(--shadow-sm)' }} />
+                      <div>
+                        <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)' }}>Aperçu</p>
+                        <p style={{ fontSize: '0.68rem', fontFamily: 'var(--font-mono)', color: 'var(--text-3)' }}>{accentColor}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 5 }}>
+                      Nouveau mot de passe
+                      <span style={{ fontWeight: 400, textTransform: 'none', marginLeft: 6, color: 'var(--text-4)' }}>
+                        (laisser vide pour ne pas modifier)
+                      </span>
+                    </label>
+                    <input
+                      type="password" value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      placeholder="••••••••"
+                      style={inputStyle}
+                      onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+                      onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+                    />
+                  </div>
+                </div>
+              </AdminSection>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
 
-function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
+function AdminSection({
+  title, subtitle, action, children,
+}: {
+  title: string; subtitle?: string; action?: React.ReactNode; children: React.ReactNode;
+}) {
   return (
-    <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, padding: '20px' }}>
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold" style={{ color: 'var(--text)' }}>{title}</h2>
+    <div
+      className="slide-up"
+      style={{
+        background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 16, padding: '22px', boxShadow: 'var(--shadow-sm)',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18 }}>
+        <div>
+          <h2 style={{ fontSize: '0.92rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.02em' }}>{title}</h2>
+          {subtitle && <p style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginTop: 3 }}>{subtitle}</p>}
+        </div>
         {action}
       </div>
       {children}
     </div>
-  );
-}
-
-function Btn({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button onClick={onClick} className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white"
-      style={{ background: 'var(--accent)' }}>
-      {children}
-    </button>
   );
 }
