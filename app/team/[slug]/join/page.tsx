@@ -1,5 +1,5 @@
 'use client';
-import { useState, use } from 'react';
+import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -12,7 +12,7 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
   const [loading, setLoading] = useState(false);
   const [needsPassword, setNeedsPassword] = useState<boolean | null>(null);
 
-  useState(() => {
+  useEffect(() => {
     fetch(`/api/teams/${slug}`)
       .then(r => r.json())
       .then(({ team }) => {
@@ -22,7 +22,7 @@ export default function JoinPage({ params }: { params: Promise<{ slug: string }>
         setNeedsPassword(team?.hasPassword ?? false);
       })
       .catch(() => setNeedsPassword(false));
-  });
+  }, [slug]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

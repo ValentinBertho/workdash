@@ -80,6 +80,17 @@ export interface FolderHistoryEntry {
   createdAt: string;
 }
 
+export interface FolderTask {
+  id: string;
+  folderId: string;
+  title: string;
+  done: boolean;
+  assigneeId?: string;
+  assigneeName?: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
 export interface TeamSession {
   memberId: string;
   memberName: string;

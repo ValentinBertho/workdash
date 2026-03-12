@@ -7,6 +7,7 @@ import {
   folders,
   folderComments,
   folderHistory,
+  folderTasks,
   memberFolderViews,
 } from './db/schema';
 import {
@@ -16,6 +17,7 @@ import {
   Folder,
   FolderComment,
   FolderHistoryEntry,
+  FolderTask,
   MemberRole,
   HistoryEventType,
   HistoryPayload,
@@ -467,6 +469,63 @@ export async function addHistoryEntry(data: {
 }
 
 /* ─── Views (notifications) ──────────────────────────────────── */
+
+/* ─── Tasks ──────────────────────────────────────────────────── */
+
+export async function getFolderTasks(folderId: string): Promise<FolderTask[]> {
+  const rows = await db
+    .select()
+    .from(folderTasks)
+    .where(eq(folderTasks.folderId, folderId))
+    .orderBy(folderTasks.sortOrder, folderTasks.createdAt);
+  return rows.map(r => ({
+    id: r.id,
+    folderId: r.folderId,
+    title: r.title,
+    done: r.done,
+    assigneeId: r.assigneeId ?? undefined,
+    assigneeName: r.assigneeName ?? undefined,
+    sortOrder: r.sortOrder,
+    createdAt: r.createdAt,
+  }));
+}
+
+export async function createFolderTask(data: {
+  folderId: string;
+  title: string;
+  assigneeId?: string;
+  assigneeName?: string;
+  sortOrder?: number;
+}): Promise<FolderTask> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db.insert(folderTasks).values({
+    id,
+    folderId: data.folderId,
+    title: data.title,
+    done: false,
+    assigneeId: data.assigneeId ?? null,
+    assigneeName: data.assigneeName ?? null,
+    sortOrder: data.sortOrder ?? 0,
+    createdAt: now,
+  });
+  return {
+    id, folderId: data.folderId, title: data.title, done: false,
+    assigneeId: data.assigneeId, assigneeName: data.assigneeName,
+    sortOrder: data.sortOrder ?? 0, createdAt: now,
+  };
+}
+
+export async function updateFolderTask(
+  id: string,
+  updates: Partial<{ title: string; done: boolean; assigneeId: string | null; assigneeName: string | null; sortOrder: number }>,
+): Promise<void> {
+  await db.update(folderTasks).set(updates).where(eq(folderTasks.id, id));
+}
+
+export async function deleteFolderTask(id: string): Promise<void> {
+  await db.delete(folderTasks).where(eq(folderTasks.id, id));
+}
 
 export async function markFolderViewed(memberId: string, folderId: string) {
   const now = new Date().toISOString();

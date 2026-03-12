@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, use } from 'react';
 import Link from 'next/link';
-import { Folder, FolderComment, FolderHistoryEntry, WorkflowStep, TeamMember } from '@/types';
+import { Folder, FolderComment, FolderHistoryEntry, FolderTask, WorkflowStep, TeamMember } from '@/types';
 import { Sidebar } from '@/app/components/Sidebar';
 
 function relTime(iso: string) {
@@ -39,6 +39,7 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
   const [history, setHistory] = useState<FolderHistoryEntry[]>([]);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [tasks, setTasks] = useState<FolderTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [editMode, setEditMode] = useState(false);
   const [comment, setComment] = useState('');
@@ -57,12 +58,14 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
       fetch(`/api/teams/${slug}/folders/${id}`).then(r => r.json()),
       fetch(`/api/teams/${slug}/steps`).then(r => r.json()),
       fetch(`/api/teams/${slug}/members`).then(r => r.json()),
-    ]).then(([folderData, stepsData, membersData]) => {
+      fetch(`/api/teams/${slug}/folders/${id}/tasks`).then(r => r.json()),
+    ]).then(([folderData, stepsData, membersData, tasksData]) => {
       setFolder(folderData.folder);
       setComments(folderData.comments ?? []);
       setHistory(folderData.history ?? []);
       setSteps(stepsData.steps ?? []);
       setMembers(membersData.members ?? []);
+      setTasks(tasksData.tasks ?? []);
       if (folderData.folder) {
         setEditTitle(folderData.folder.title);
         setEditStep(folderData.folder.stepId ?? '');
@@ -378,6 +381,17 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
                 )}
               </div>
 
+              {/* Tasks */}
+              <TasksSection
+                slug={slug}
+                folderId={id}
+                tasks={tasks}
+                members={members}
+                onAdd={t => setTasks(prev => [...prev, t])}
+                onToggle={(taskId, done) => setTasks(prev => prev.map(t => t.id === taskId ? { ...t, done } : t))}
+                onDelete={taskId => setTasks(prev => prev.filter(t => t.id !== taskId))}
+              />
+
               {/* Comments */}
               <div
                 className="slide-up stagger-1"
@@ -514,6 +528,241 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ─── Tasks Section ──────────────────────────────────────────── */
+function TasksSection({
+  slug, folderId, tasks, members, onAdd, onToggle, onDelete,
+}: {
+  slug: string;
+  folderId: string;
+  tasks: FolderTask[];
+  members: TeamMember[];
+  onAdd: (t: FolderTask) => void;
+  onToggle: (id: string, done: boolean) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [newTitle, setNewTitle] = useState('');
+  const [newAssigneeId, setNewAssigneeId] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+
+  const doneCount = tasks.filter(t => t.done).length;
+  const pct = tasks.length > 0 ? Math.round((doneCount / tasks.length) * 100) : 0;
+
+  const addTask = async () => {
+    if (!newTitle.trim()) return;
+    setAdding(true);
+    const assignee = members.find(m => m.id === newAssigneeId);
+    const res = await fetch(`/api/teams/${slug}/folders/${folderId}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: newTitle.trim(),
+        assigneeId: newAssigneeId || undefined,
+        assigneeName: assignee?.name || undefined,
+        sortOrder: tasks.length,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      onAdd(data.task);
+      setNewTitle('');
+      setNewAssigneeId('');
+      setShowForm(false);
+    }
+    setAdding(false);
+  };
+
+  const toggleTask = async (taskId: string, done: boolean) => {
+    onToggle(taskId, done);
+    await fetch(`/api/teams/${slug}/folders/${folderId}/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ done }),
+    });
+  };
+
+  const deleteTask = async (taskId: string) => {
+    onDelete(taskId);
+    await fetch(`/api/teams/${slug}/folders/${folderId}/tasks/${taskId}`, { method: 'DELETE' });
+  };
+
+  return (
+    <div
+      className="slide-up stagger-1"
+      style={{
+        background: 'var(--surface)', borderRadius: 16, padding: '20px',
+        border: '1px solid var(--border)', boxShadow: 'var(--shadow-sm)',
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: tasks.length > 0 ? 14 : 0 }}>
+        <h2 style={{ fontSize: '0.82rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em', flex: 1 }}>
+          Tâches
+        </h2>
+        {tasks.length > 0 && (
+          <span style={{ fontSize: '0.65rem', color: 'var(--text-3)', fontWeight: 500 }}>
+            {doneCount}/{tasks.length}
+          </span>
+        )}
+        <button
+          onClick={() => setShowForm(v => !v)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 4,
+            padding: '4px 10px', borderRadius: 7, border: 'none',
+            background: showForm ? 'var(--accent-light)' : 'var(--surface-2)',
+            color: showForm ? 'var(--accent)' : 'var(--text-3)',
+            fontSize: '0.72rem', fontWeight: 600, transition: 'all 0.15s',
+          }}
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          Ajouter
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      {tasks.length > 0 && (
+        <div style={{ height: 4, background: 'var(--surface-2)', borderRadius: 'var(--r-full)', overflow: 'hidden', marginBottom: 14 }}>
+          <div style={{
+            height: '100%', width: `${pct}%`,
+            background: pct === 100 ? '#16a34a' : 'var(--accent)',
+            borderRadius: 'var(--r-full)',
+            transition: 'width 0.5s var(--ease-spring)',
+          }} />
+        </div>
+      )}
+
+      {/* Task list */}
+      {tasks.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: showForm ? 12 : 0 }}>
+          {tasks.map(t => (
+            <div
+              key={t.id}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '7px 8px', borderRadius: 9,
+                transition: 'background 0.12s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              {/* Checkbox */}
+              <button
+                onClick={() => toggleTask(t.id, !t.done)}
+                style={{
+                  width: 18, height: 18, borderRadius: 5, border: 'none',
+                  flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: t.done ? 'var(--accent)' : 'transparent',
+                  outline: t.done ? 'none' : '2px solid var(--border-2)',
+                  transition: 'all 0.15s',
+                }}
+              >
+                {t.done && (
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                )}
+              </button>
+
+              {/* Title */}
+              <span style={{
+                flex: 1, fontSize: '0.83rem', color: t.done ? 'var(--text-4)' : 'var(--text)',
+                textDecoration: t.done ? 'line-through' : 'none',
+                fontWeight: t.done ? 400 : 500,
+                transition: 'all 0.15s',
+              }}>
+                {t.title}
+              </span>
+
+              {/* Assignee */}
+              {t.assigneeName && (
+                <div
+                  className="avatar"
+                  style={{ width: 20, height: 20, fontSize: '0.55rem', borderRadius: 5, flexShrink: 0, opacity: t.done ? 0.5 : 1 }}
+                  title={t.assigneeName}
+                >
+                  {t.assigneeName.slice(0, 1).toUpperCase()}
+                </div>
+              )}
+
+              {/* Delete */}
+              <button
+                onClick={() => deleteTask(t.id)}
+                style={{
+                  width: 20, height: 20, borderRadius: 5, border: 'none',
+                  background: 'transparent', color: 'var(--text-4)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.9rem', transition: 'all 0.15s', opacity: 0,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.opacity = '1'; e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                onMouseLeave={e => { e.currentTarget.style.opacity = '0'; e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-4)'; }}
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty state */}
+      {tasks.length === 0 && !showForm && (
+        <p style={{ fontSize: '0.78rem', color: 'var(--text-4)', textAlign: 'center', padding: '14px 0 4px' }}>
+          Aucune tâche — cliquez sur <strong>Ajouter</strong> pour démarrer.
+        </p>
+      )}
+
+      {/* Add form */}
+      {showForm && (
+        <div className="slide-down" style={{
+          display: 'flex', gap: 8, alignItems: 'flex-end',
+          padding: '10px', borderRadius: 10,
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+        }}>
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <input
+              autoFocus
+              value={newTitle}
+              onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addTask()}
+              placeholder="Titre de la tâche…"
+              style={{
+                width: '100%', padding: '8px 10px', borderRadius: 8,
+                border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
+                fontSize: '0.83rem', outline: 'none', transition: 'border-color 0.15s',
+              }}
+              onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+              onBlur={e => (e.target.style.borderColor = 'var(--border)')}
+            />
+            {members.length > 0 && (
+              <select
+                value={newAssigneeId}
+                onChange={e => setNewAssigneeId(e.target.value)}
+                style={{
+                  width: '100%', padding: '6px 10px', borderRadius: 8,
+                  border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
+                  fontSize: '0.78rem', outline: 'none',
+                }}
+              >
+                <option value="">Non assignée</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            )}
+          </div>
+          <button
+            onClick={addTask}
+            disabled={adding || !newTitle.trim()}
+            className="btn-primary"
+            style={{ padding: '8px 14px', fontSize: '0.78rem', flexShrink: 0 }}
+          >
+            {adding ? '…' : 'Ajouter'}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

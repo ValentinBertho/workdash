@@ -63,6 +63,17 @@ export const folderHistory = pgTable('folder_history', {
   createdAt: text('created_at').notNull(),
 });
 
+export const folderTasks = pgTable('folder_tasks', {
+  id: text('id').primaryKey(),
+  folderId: text('folder_id').notNull().references(() => folders.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  done: boolean('done').notNull().default(false),
+  assigneeId: text('assignee_id'),
+  assigneeName: text('assignee_name'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: text('created_at').notNull(),
+});
+
 export const memberFolderViews = pgTable('member_folder_views', {
   memberId: text('member_id').notNull().references(() => teamMembers.id, { onDelete: 'cascade' }),
   folderId: text('folder_id').notNull().references(() => folders.id, { onDelete: 'cascade' }),
