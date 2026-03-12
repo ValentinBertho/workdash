@@ -159,6 +159,45 @@ export async function getMemberByName(teamSlug: string, name: string): Promise<T
   };
 }
 
+export async function getMemberForAuth(teamSlug: string, name: string): Promise<(TeamMember & { passwordHash: string | null }) | null> {
+  const [row] = await db
+    .select()
+    .from(teamMembers)
+    .where(and(eq(teamMembers.teamSlug, teamSlug), eq(teamMembers.name, name)));
+  if (!row) return null;
+  return {
+    id: row.id,
+    teamSlug: row.teamSlug,
+    name: row.name,
+    role: row.role as MemberRole,
+    canComment: row.canComment,
+    createdAt: row.createdAt,
+    passwordHash: row.passwordHash ?? null,
+  };
+}
+
+export async function setMemberPassword(id: string, password: string | null) {
+  const passwordHash = password ? await hashPassword(password) : null;
+  await db.update(teamMembers).set({ passwordHash }).where(eq(teamMembers.id, id));
+}
+
+export async function getTeamMembersWithPasswordFlag(slug: string): Promise<(TeamMember & { hasPassword: boolean })[]> {
+  const rows = await db
+    .select()
+    .from(teamMembers)
+    .where(eq(teamMembers.teamSlug, slug))
+    .orderBy(teamMembers.createdAt);
+  return rows.map(r => ({
+    id: r.id,
+    teamSlug: r.teamSlug,
+    name: r.name,
+    role: r.role as MemberRole,
+    canComment: r.canComment,
+    createdAt: r.createdAt,
+    hasPassword: !!r.passwordHash,
+  }));
+}
+
 export async function getMemberToken(id: string): Promise<string | null> {
   const [row] = await db
     .select({ token: teamMembers.token })
@@ -209,6 +248,41 @@ export async function updateMember(
   if (Object.keys(set).length > 0) {
     await db.update(teamMembers).set(set).where(eq(teamMembers.id, id));
   }
+}
+
+export async function createMemberWithPassword(data: {
+  teamSlug: string;
+  name: string;
+  role?: MemberRole;
+  canComment?: boolean;
+  password?: string;
+}): Promise<{ member: TeamMember & { hasPassword: boolean }; token: string }> {
+  const token = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const passwordHash = data.password ? await hashPassword(data.password) : null;
+  await db.insert(teamMembers).values({
+    id,
+    teamSlug: data.teamSlug,
+    name: data.name,
+    role: data.role ?? 'operator',
+    canComment: data.canComment ?? true,
+    passwordHash,
+    token,
+    createdAt: now,
+  });
+  return {
+    token,
+    member: {
+      id,
+      teamSlug: data.teamSlug,
+      name: data.name,
+      role: data.role ?? 'operator',
+      canComment: data.canComment ?? true,
+      createdAt: now,
+      hasPassword: !!passwordHash,
+    },
+  };
 }
 
 export async function deleteMember(id: string) {

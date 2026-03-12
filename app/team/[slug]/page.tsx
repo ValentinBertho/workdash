@@ -2,7 +2,7 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Folder, WorkflowStep, TeamMember } from '@/types';
+import { Folder, WorkflowStep, TeamMember, TeamSession } from '@/types';
 import { Sidebar } from '@/app/components/Sidebar';
 
 type View = 'kanban' | 'list';
@@ -25,8 +25,10 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   const [folders, setFolders] = useState<Folder[]>([]);
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [session, setSession] = useState<Pick<TeamSession, 'memberId' | 'memberName' | 'role'> | null>(null);
   const [view, setView] = useState<View>('kanban');
   const [search, setSearch] = useState('');
+  const [myOnly, setMyOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
 
@@ -41,11 +43,13 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
         setFolders(data.folders ?? []);
         setSteps(data.steps ?? []);
         setMembers(data.members ?? []);
+        setSession(data.session ?? null);
       })
       .finally(() => setLoading(false));
   }, [slug, router]);
 
   const filtered = folders.filter(f => {
+    if (myOnly && session && f.assigneeId !== session.memberId) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return f.title.toLowerCase().includes(q) || f.ref.includes(q);
@@ -99,6 +103,26 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
           </div>
 
           <div style={{ flex: 1 }} />
+
+          {/* My folders filter */}
+          {session && (
+            <button
+              onClick={() => setMyOnly(v => !v)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6,
+                padding: '5px 12px', borderRadius: 9, fontSize: '0.78rem',
+                border: `1px solid ${myOnly ? 'var(--accent)' : 'var(--border)'}`,
+                background: myOnly ? 'var(--accent-light)' : 'var(--surface-2)',
+                color: myOnly ? 'var(--accent)' : 'var(--text-3)',
+                fontWeight: myOnly ? 600 : 400, transition: 'all 0.15s',
+              }}
+            >
+              <div className="avatar" style={{ width: 16, height: 16, fontSize: '0.5rem', borderRadius: 4 }}>
+                {session.memberName.slice(0, 1).toUpperCase()}
+              </div>
+              Mes dossiers
+            </button>
+          )}
 
           {/* Search */}
           <div style={{ position: 'relative' }}>

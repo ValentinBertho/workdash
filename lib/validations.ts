@@ -12,6 +12,7 @@ export const CreateTeamSchema = z.object({
 export const TeamAuthSchema = z.object({
   password: z.string().optional(),
   memberName: z.string().min(1).max(80),
+  memberPassword: z.string().optional(),
 });
 
 export const CreateFolderSchema = z.object({
@@ -43,12 +44,17 @@ export const CreateMemberSchema = z.object({
   name: z.string().min(1).max(80),
   role: z.enum(['admin', 'operator', 'viewer']).optional(),
   canComment: z.boolean().optional(),
+  password: z.string().min(1).max(100).optional(),
 });
 
 export const UpdateMemberSchema = z.object({
   role: z.enum(['admin', 'operator', 'viewer']).optional(),
   canComment: z.boolean().optional(),
   name: z.string().min(1).max(80).optional(),
+});
+
+export const SetMemberPasswordSchema = z.object({
+  password: z.string().min(1).max(100).nullable(),
 });
 
 export const CreateStepSchema = z.object({

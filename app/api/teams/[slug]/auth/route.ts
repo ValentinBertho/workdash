@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTeamForAuth, getMemberByName, getMemberToken, createMember } from '@/lib/data';
+import { getTeamForAuth, getMemberForAuth, getMemberToken, createMemberWithPassword } from '@/lib/data';
 import { createTeamToken, verifyPassword, cookieName } from '@/lib/auth';
 import { TeamAuthSchema } from '@/lib/validations';
 
@@ -16,21 +16,29 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  const { password, memberName } = parsed.data;
+  const { password, memberName, memberPassword } = parsed.data;
 
+  // Check team password
   if (team.passwordHash) {
     if (!password || !(await verifyPassword(password, team.passwordHash))) {
-      return NextResponse.json({ error: 'Mot de passe incorrect' }, { status: 401 });
+      return NextResponse.json({ error: 'Mot de passe équipe incorrect' }, { status: 401 });
     }
   }
 
-  let member = await getMemberByName(slug, memberName);
+  let member = await getMemberForAuth(slug, memberName);
   let token: string;
 
   if (member) {
+    // Check member personal password if set
+    if (member.passwordHash) {
+      if (!memberPassword || !(await verifyPassword(memberPassword, member.passwordHash))) {
+        return NextResponse.json({ error: 'Mot de passe incorrect' }, { status: 401 });
+      }
+    }
     token = (await getMemberToken(member.id))!;
   } else {
-    const result = await createMember({ teamSlug: slug, name: memberName, role: 'operator' });
+    // Create new member (open-access teams without pre-created accounts)
+    const result = await createMemberWithPassword({ teamSlug: slug, name: memberName, role: 'operator' });
     member = result.member;
     token = result.token;
   }

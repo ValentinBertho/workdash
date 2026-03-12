@@ -3,6 +3,8 @@ import { useState, useEffect, use } from 'react';
 import { WorkflowStep, TeamMember, MemberRole } from '@/types';
 import { Sidebar } from '@/app/components/Sidebar';
 
+type MemberWithPassword = TeamMember & { hasPassword: boolean };
+
 const COLORS = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#f97316', '#6b7280'];
 const ROLES: { value: MemberRole; label: string; desc: string }[] = [
   { value: 'admin', label: 'Admin', desc: 'Tout gérer' },
@@ -14,7 +16,9 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
   const { slug } = use(params);
   const [tab, setTab] = useState<'steps' | 'members' | 'settings'>('steps');
   const [steps, setSteps] = useState<WorkflowStep[]>([]);
-  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [members, setMembers] = useState<MemberWithPassword[]>([]);
+  const [editingPasswordId, setEditingPasswordId] = useState<string | null>(null);
+  const [passwordInput, setPasswordInput] = useState('');
   const [teamName, setTeamName] = useState('');
   const [accentColor, setAccentColor] = useState('#4f46e5');
   const [newPassword, setNewPassword] = useState('');
@@ -70,15 +74,30 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
   const addMember = async () => {
     const name = prompt('Nom du membre');
     if (!name?.trim()) return;
+    const password = prompt('Mot de passe (optionnel — laisser vide pour aucun)');
     const res = await fetch(`/api/teams/${slug}/members`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim(), role: 'operator' }),
+      body: JSON.stringify({ name: name.trim(), role: 'operator', password: password?.trim() || undefined }),
     });
     const data = await res.json();
     if (res.ok) { setMembers(prev => [...prev, data.member]); flash('Membre ajouté'); }
   };
 
-  const updateMember = async (id: string, updates: Partial<TeamMember>) => {
+  const savePassword = async (id: string) => {
+    const pw = passwordInput.trim();
+    const res = await fetch(`/api/teams/${slug}/members/${id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw || null }),
+    });
+    if (res.ok) {
+      setMembers(prev => prev.map(m => m.id === id ? { ...m, hasPassword: !!pw } : m));
+      setEditingPasswordId(null);
+      setPasswordInput('');
+      flash(pw ? 'Mot de passe défini' : 'Mot de passe supprimé');
+    }
+  };
+
+  const updateMember = async (id: string, updates: Partial<MemberWithPassword>) => {
     await fetch(`/api/teams/${slug}/members/${id}`, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
@@ -268,55 +287,122 @@ export default function AdminPage({ params }: { params: Promise<{ slug: string }
               >
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {members.map(m => (
-                    <div
-                      key={m.id}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: 12,
-                        background: 'var(--surface-2)', border: '1px solid var(--border)',
-                        borderRadius: 12, padding: '11px 14px',
-                      }}
-                    >
-                      <div className="avatar" style={{ width: 34, height: 34, fontSize: '0.8rem', borderRadius: 9 }}>
-                        {m.name.slice(0, 1).toUpperCase()}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>{m.name}</p>
-                        <p style={{ fontSize: '0.68rem', color: 'var(--text-4)', marginTop: 1 }}>
-                          Depuis le {new Date(m.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
-                        </p>
-                      </div>
-                      <select
-                        value={m.role}
-                        onChange={e => updateMember(m.id, { role: e.target.value as MemberRole })}
+                    <div key={m.id}>
+                      <div
                         style={{
-                          padding: '5px 9px', borderRadius: 8, fontSize: '0.75rem',
-                          border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
-                          outline: 'none', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 12,
+                          background: 'var(--surface-2)', border: '1px solid var(--border)',
+                          borderRadius: editingPasswordId === m.id ? '12px 12px 0 0' : 12,
+                          padding: '11px 14px',
                         }}
                       >
-                        {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
-                      </select>
-                      <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: 'var(--text-3)', cursor: 'pointer', userSelect: 'none' }}>
-                        <input
-                          type="checkbox" checked={m.canComment}
-                          onChange={e => updateMember(m.id, { canComment: e.target.checked })}
-                          style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
-                        />
-                        Commenter
-                      </label>
-                      <button
-                        onClick={() => deleteMember(m.id)}
-                        style={{
-                          width: 26, height: 26, borderRadius: 7, border: 'none',
-                          background: 'transparent', color: 'var(--text-4)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '1.1rem', transition: 'background 0.15s, color 0.15s',
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
-                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-4)'; }}
-                      >
-                        ×
-                      </button>
+                        <div className="avatar" style={{ width: 34, height: 34, fontSize: '0.8rem', borderRadius: 9 }}>
+                          {m.name.slice(0, 1).toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text)' }}>{m.name}</p>
+                          <p style={{ fontSize: '0.68rem', color: 'var(--text-4)', marginTop: 1 }}>
+                            Depuis le {new Date(m.createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' })}
+                          </p>
+                        </div>
+                        <select
+                          value={m.role}
+                          onChange={e => updateMember(m.id, { role: e.target.value as MemberRole })}
+                          style={{
+                            padding: '5px 9px', borderRadius: 8, fontSize: '0.75rem',
+                            border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
+                            outline: 'none', cursor: 'pointer',
+                          }}
+                        >
+                          {ROLES.map(r => <option key={r.value} value={r.value}>{r.label}</option>)}
+                        </select>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', color: 'var(--text-3)', cursor: 'pointer', userSelect: 'none' }}>
+                          <input
+                            type="checkbox" checked={m.canComment}
+                            onChange={e => updateMember(m.id, { canComment: e.target.checked })}
+                            style={{ accentColor: 'var(--accent)', cursor: 'pointer' }}
+                          />
+                          Commenter
+                        </label>
+                        {/* Password toggle */}
+                        <button
+                          onClick={() => {
+                            if (editingPasswordId === m.id) { setEditingPasswordId(null); setPasswordInput(''); }
+                            else { setEditingPasswordId(m.id); setPasswordInput(''); }
+                          }}
+                          title={m.hasPassword ? 'Changer le mot de passe' : 'Définir un mot de passe'}
+                          style={{
+                            width: 26, height: 26, borderRadius: 7, border: 'none',
+                            background: m.hasPassword ? 'var(--accent-light)' : 'transparent',
+                            color: m.hasPassword ? 'var(--accent)' : 'var(--text-4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            transition: 'background 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent)'; }}
+                          onMouseLeave={e => {
+                            e.currentTarget.style.background = m.hasPassword ? 'var(--accent-light)' : 'transparent';
+                            e.currentTarget.style.color = m.hasPassword ? 'var(--accent)' : 'var(--text-4)';
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => deleteMember(m.id)}
+                          style={{
+                            width: 26, height: 26, borderRadius: 7, border: 'none',
+                            background: 'transparent', color: 'var(--text-4)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            fontSize: '1.1rem', transition: 'background 0.15s, color 0.15s',
+                          }}
+                          onMouseEnter={e => { e.currentTarget.style.background = '#fef2f2'; e.currentTarget.style.color = '#dc2626'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-4)'; }}
+                        >
+                          ×
+                        </button>
+                      </div>
+
+                      {/* Inline password form */}
+                      {editingPasswordId === m.id && (
+                        <div style={{
+                          padding: '12px 14px', background: 'var(--accent-light)',
+                          border: '1px solid var(--accent-border)', borderTop: 'none',
+                          borderRadius: '0 0 12px 12px',
+                          display: 'flex', alignItems: 'center', gap: 8,
+                        }}>
+                          <input
+                            autoFocus
+                            type="password"
+                            value={passwordInput}
+                            onChange={e => setPasswordInput(e.target.value)}
+                            placeholder="Nouveau mot de passe (vide = supprimer)"
+                            onKeyDown={e => { if (e.key === 'Enter') savePassword(m.id); if (e.key === 'Escape') { setEditingPasswordId(null); setPasswordInput(''); } }}
+                            style={{
+                              flex: 1, padding: '7px 11px', borderRadius: 8,
+                              border: '1px solid var(--accent-border)', background: 'var(--surface)',
+                              color: 'var(--text)', fontSize: '0.82rem', outline: 'none',
+                            }}
+                          />
+                          <button
+                            onClick={() => savePassword(m.id)}
+                            className="btn-primary"
+                            style={{ padding: '7px 14px', fontSize: '0.78rem' }}
+                          >
+                            {passwordInput.trim() ? 'Définir' : 'Supprimer'}
+                          </button>
+                          <button
+                            onClick={() => { setEditingPasswordId(null); setPasswordInput(''); }}
+                            style={{
+                              padding: '7px 10px', borderRadius: 8, border: '1px solid var(--border)',
+                              background: 'var(--surface)', color: 'var(--text-3)', fontSize: '0.78rem',
+                            }}
+                          >
+                            Annuler
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

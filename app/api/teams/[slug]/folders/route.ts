@@ -17,7 +17,17 @@ export async function GET(req: NextRequest, { params }: Params) {
     getTeamMembers(slug),
   ]);
 
-  return NextResponse.json({ folders: folderList, steps, members });
+  return NextResponse.json({
+    folders: folderList,
+    steps,
+    members,
+    session: {
+      memberId: session.memberId,
+      memberName: session.memberName,
+      role: session.role,
+      canComment: session.canComment,
+    },
+  });
 }
 
 export async function POST(req: NextRequest, { params }: Params) {

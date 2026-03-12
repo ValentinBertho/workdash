@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTeamMembers, createMember } from '@/lib/data';
+import { getTeamMembersWithPasswordFlag, createMemberWithPassword } from '@/lib/data';
 import { getTeamSession } from '@/lib/auth';
 import { CreateMemberSchema } from '@/lib/validations';
 
@@ -9,7 +9,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { slug } = await params;
   const session = await getTeamSession(slug);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  const members = await getTeamMembers(slug);
+  const members = await getTeamMembersWithPasswordFlag(slug);
   return NextResponse.json({ members });
 }
 
@@ -24,6 +24,6 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const { member } = await createMember({ teamSlug: slug, ...parsed.data });
+  const { member } = await createMemberWithPassword({ teamSlug: slug, ...parsed.data });
   return NextResponse.json({ member }, { status: 201 });
 }

@@ -16,6 +16,7 @@ export const teamMembers = pgTable('team_members', {
   name: text('name').notNull(),
   role: text('role').notNull().default('operator'), // admin | operator | viewer
   canComment: boolean('can_comment').notNull().default(true),
+  passwordHash: text('password_hash'), // optional per-member password
   token: text('token').notNull(),
   createdAt: text('created_at').notNull(),
 });
