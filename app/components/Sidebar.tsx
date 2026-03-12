@@ -1,8 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { TeamMember } from '@/types';
+import { TeamMember, Folder } from '@/types';
 
 interface SidebarProps {
   slug: string;
@@ -10,6 +10,186 @@ interface SidebarProps {
   members?: TeamMember[];
   teamName?: string;
   accentColor?: string;
+}
+
+/* ─── Notification bell ──────────────────────────────────────── */
+function NotifBell({ slug }: { slug: string }) {
+  const [notifs, setNotifs] = useState<Folder[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  const fetchNotifs = async () => {
+    try {
+      const r = await fetch(`/api/teams/${slug}/folders`);
+      if (!r.ok) return;
+      const data = await r.json();
+      setNotifs((data.folders ?? []).filter((f: Folder) => f.hasUnread));
+    } catch {}
+  };
+
+  useEffect(() => {
+    fetchNotifs();
+    const interval = setInterval(fetchNotifs, 30_000);
+    return () => clearInterval(interval);
+  }, [slug]);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const count = notifs.length;
+
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        title="Notifications"
+        style={{
+          width: 26, height: 26, borderRadius: 7,
+          border: `1px solid ${count > 0 ? 'var(--accent-border)' : 'var(--border)'}`,
+          background: count > 0 ? 'var(--accent-light)' : 'var(--surface-2)',
+          color: count > 0 ? 'var(--accent)' : 'var(--text-3)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', transition: 'all 0.15s', position: 'relative',
+        }}
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+          <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+        </svg>
+        {count > 0 && (
+          <span style={{
+            position: 'absolute', top: -4, right: -4,
+            minWidth: 14, height: 14, borderRadius: 'var(--r-full)',
+            background: 'var(--accent)', color: '#fff',
+            fontSize: '0.56rem', fontWeight: 700,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '0 3px', lineHeight: 1,
+            border: '1.5px solid var(--surface)',
+          }}>
+            {count > 9 ? '9+' : count}
+          </span>
+        )}
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', top: '110%', left: 0,
+          width: 280, zIndex: 200,
+          background: 'var(--surface)', border: '1px solid var(--border)',
+          borderRadius: 14, boxShadow: 'var(--shadow-xl)',
+          overflow: 'hidden',
+        }}>
+          {/* Header */}
+          <div style={{
+            padding: '12px 14px 10px',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text)', letterSpacing: '-0.01em' }}>
+              Notifications
+            </span>
+            {count > 0 && (
+              <span style={{
+                fontSize: '0.62rem', fontWeight: 600, padding: '1px 7px',
+                borderRadius: 'var(--r-full)', background: 'var(--accent-light)', color: 'var(--accent)',
+              }}>
+                {count} non lu{count > 1 ? 's' : ''}
+              </span>
+            )}
+          </div>
+
+          {/* List */}
+          <div style={{ maxHeight: 320, overflowY: 'auto' }}>
+            {notifs.length === 0 ? (
+              <div style={{
+                padding: '28px 14px', textAlign: 'center',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8,
+              }}>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--text-4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                </svg>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-4)' }}>Tout est à jour !</p>
+              </div>
+            ) : (
+              notifs.map(f => (
+                <a
+                  key={f.id}
+                  href={`/team/${slug}/folder/${f.id}`}
+                  onClick={() => setOpen(false)}
+                  style={{
+                    display: 'flex', alignItems: 'flex-start', gap: 10,
+                    padding: '10px 14px', textDecoration: 'none',
+                    borderBottom: '1px solid var(--border)',
+                    transition: 'background 0.12s',
+                  }}
+                  onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                  onMouseLeave={e => (e.currentTarget.style.background = '')}
+                >
+                  <div style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: f.stepColor ?? 'var(--accent)',
+                    flexShrink: 0, marginTop: 5,
+                  }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{
+                      fontSize: '0.8rem', fontWeight: 600, color: 'var(--text)',
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      lineHeight: 1.4,
+                    }}>
+                      {f.title}
+                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 3 }}>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.6rem', color: 'var(--text-4)' }}>
+                        {f.ref}
+                      </span>
+                      {f.stepName && (
+                        <span style={{
+                          fontSize: '0.6rem', fontWeight: 600,
+                          color: f.stepColor ?? 'var(--text-3)',
+                          background: f.stepColor
+                            ? `color-mix(in srgb, ${f.stepColor} 12%, var(--surface))`
+                            : 'var(--surface-2)',
+                          padding: '1px 5px', borderRadius: 4,
+                        }}>
+                          {f.stepName}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <span className="unread-dot" style={{ flexShrink: 0, marginTop: 4 }} />
+                </a>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          {notifs.length > 0 && (
+            <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)' }}>
+              <a
+                href={`/team/${slug}`}
+                onClick={() => setOpen(false)}
+                style={{
+                  display: 'block', textAlign: 'center',
+                  fontSize: '0.72rem', fontWeight: 600, color: 'var(--accent)',
+                  textDecoration: 'none', padding: '4px 0',
+                }}
+              >
+                Voir tous les dossiers →
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export function Sidebar({ slug, active, members = [], teamName: initialName, accentColor }: SidebarProps) {
@@ -86,8 +266,8 @@ export function Sidebar({ slug, active, members = [], teamName: initialName, acc
     <aside className="sidebar">
       <div style={{ height: 3, background: 'var(--accent)', flexShrink: 0 }} />
 
-      <div style={{ padding: '14px 14px 10px', display: 'flex', alignItems: 'center', gap: 0 }}>
-        <Link href="/" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 7, flex: 1 }}>
+      <div style={{ padding: '14px 14px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <Link href={`/team/${slug}`} style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 7, flex: 1 }}>
           <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--accent)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M3 12h12M3 18h7" /></svg>
           </div>
@@ -95,6 +275,7 @@ export function Sidebar({ slug, active, members = [], teamName: initialName, acc
             Work<span style={{ color: 'var(--accent)' }}>Dash</span>
           </span>
         </Link>
+        <NotifBell slug={slug} />
         <button onClick={toggleDark} title={dark ? 'Mode clair' : 'Mode sombre'}
           style={{ width: 26, height: 26, borderRadius: 7, border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text-3)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0 }}>
           {dark
