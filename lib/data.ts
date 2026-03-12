@@ -256,7 +256,7 @@ export async function createMemberWithPassword(data: {
   role?: MemberRole;
   canComment?: boolean;
   password?: string;
-}): Promise<{ member: TeamMember & { hasPassword: boolean }; token: string }> {
+}): Promise<{ member: TeamMember & { passwordHash: string | null }; token: string }> {
   const token = crypto.randomUUID();
   const now = new Date().toISOString();
   const id = crypto.randomUUID();
@@ -280,7 +280,7 @@ export async function createMemberWithPassword(data: {
       role: data.role ?? 'operator',
       canComment: data.canComment ?? true,
       createdAt: now,
-      hasPassword: !!passwordHash,
+      passwordHash,
     },
   };
 }
