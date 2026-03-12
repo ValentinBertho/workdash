@@ -283,3 +283,35 @@ button { cursor: pointer; }
   transition: background 0.15s, color 0.15s, border-color 0.15s;
 }
 .btn-ghost:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-2); }
+
+/* ─── Dark mode ──────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --bg:        #111110;
+  --surface:   #1a1a18;
+  --surface-2: #222220;
+  --surface-3: #2c2c2a;
+
+  --border:   #2e2e2b;
+  --border-2: #3d3d3a;
+
+  --text:   #f0f0e8;
+  --text-2: #c8c8c0;
+  --text-3: #888880;
+  --text-4: #555550;
+
+  --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.5), 0 4px 8px rgba(0,0,0,0.2);
+  --shadow-xl: 0 24px 48px rgba(0,0,0,0.6), 0 8px 16px rgba(0,0,0,0.25);
+}
+
+[data-theme="dark"] .dot-grid {
+  background-image: radial-gradient(circle, var(--border-2) 1px, transparent 1px);
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] textarea,
+[data-theme="dark"] select {
+  color-scheme: dark;
+}

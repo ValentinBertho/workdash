@@ -1,9 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getFolder, addComment, addHistoryEntry } from '@/lib/data';
+import { getFolder, addComment, addHistoryEntry, getFolderComments } from '@/lib/data';
 import { getTeamSession } from '@/lib/auth';
 import { AddCommentSchema } from '@/lib/validations';
 
 type Params = { params: Promise<{ slug: string; id: string }> };
+
+export async function GET(req: NextRequest, { params }: Params) {
+  const { slug, id } = await params;
+  const session = await getTeamSession(slug);
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  const folder = await getFolder(id, session.memberId);
+  if (!folder || folder.teamSlug !== slug) {
+    return NextResponse.json({ error: 'Dossier introuvable' }, { status: 404 });
+  }
+
+  const comments = await getFolderComments(id);
+  return NextResponse.json({ comments });
+}
 
 export async function POST(req: NextRequest, { params }: Params) {
   const { slug, id } = await params;

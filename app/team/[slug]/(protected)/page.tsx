@@ -1,11 +1,11 @@
 'use client';
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Folder, WorkflowStep, TeamMember, TeamSession } from '@/types';
 import { Sidebar } from '@/app/components/Sidebar';
 
-type View = 'kanban' | 'list';
+type View = 'kanban' | 'list' | 'calendar';
 
 function relTime(iso: string) {
   const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -32,6 +32,18 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
   const [loading, setLoading] = useState(true);
   const [showNewForm, setShowNewForm] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  // Advanced filters
+  const [filterStep, setFilterStep] = useState('');
+  const [filterMember, setFilterMember] = useState('');
+  const [filterPriority, setFilterPriority] = useState('');
+  const [filterTag, setFilterTag] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  const activeFilters = [filterStep, filterMember, filterPriority, filterTag].filter(Boolean).length;
 
   useEffect(() => {
     fetch(`/api/teams/${slug}/folders`)
@@ -49,8 +61,57 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
       .finally(() => setLoading(false));
   }, [slug, router]);
 
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      switch (e.key) {
+        case 'n': e.preventDefault(); setShowNewForm(true); break;
+        case 'k': e.preventDefault(); setView('kanban'); break;
+        case 'l': e.preventDefault(); setView('list'); break;
+        case 'c': e.preventDefault(); setView('calendar'); break;
+        case 'f': e.preventDefault(); searchRef.current?.focus(); break;
+        case '?': e.preventDefault(); setShowShortcuts(v => !v); break;
+        case 'Escape': setShowShortcuts(false); setShowFilters(false); break;
+      }
+    };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  const handleMove = useCallback(async (folderId: string, newStepId: string | null) => {
+    setFolders(prev => prev.map(f => {
+      if (f.id !== folderId) return f;
+      const step = steps.find(s => s.id === newStepId);
+      return { ...f, stepId: newStepId ?? undefined, stepName: step?.name, stepColor: step?.color };
+    }));
+    await fetch(`/api/teams/${slug}/folders/${folderId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stepId: newStepId ?? null }),
+    });
+  }, [slug, steps]);
+
+  const allTags = Array.from(new Set(folders.flatMap(f => f.tags))).sort();
+
   const filtered = folders.filter(f => {
     if (myOnly && session && f.assigneeId !== session.memberId) return false;
+    if (filterStep) {
+      if (filterStep === '__none' && f.stepId) return false;
+      if (filterStep !== '__none' && f.stepId !== filterStep) return false;
+    }
+    if (filterMember) {
+      if (filterMember === '__none' && f.assigneeId) return false;
+      if (filterMember !== '__none' && f.assigneeId !== filterMember) return false;
+    }
+    if (filterPriority) {
+      if (filterPriority === 'high' && f.priority < 70) return false;
+      if (filterPriority === 'medium' && (f.priority < 40 || f.priority >= 70)) return false;
+      if (filterPriority === 'low' && f.priority >= 40) return false;
+    }
+    if (filterTag && !f.tags.includes(filterTag)) return false;
     if (!search) return true;
     const q = search.toLowerCase();
     return f.title.toLowerCase().includes(q) || f.ref.includes(q);
@@ -68,6 +129,12 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
       </div>
     );
   }
+
+  const selectStyle: React.CSSProperties = {
+    padding: '6px 10px', borderRadius: 8, fontSize: '0.78rem',
+    border: '1px solid var(--border)', background: 'var(--surface-2)', color: 'var(--text)',
+    outline: 'none',
+  };
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
@@ -105,6 +172,32 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
 
           <div style={{ flex: 1 }} />
 
+          {/* Advanced filter toggle */}
+          <button
+            onClick={() => setShowFilters(v => !v)}
+            title="Filtres avancés"
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: '5px 11px', borderRadius: 9, fontSize: '0.78rem',
+              border: `1px solid ${activeFilters > 0 ? 'var(--accent)' : 'var(--border)'}`,
+              background: activeFilters > 0 ? 'var(--accent-light)' : 'var(--surface-2)',
+              color: activeFilters > 0 ? 'var(--accent)' : 'var(--text-3)',
+              fontWeight: activeFilters > 0 ? 600 : 400, transition: 'all 0.15s',
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            Filtres
+            {activeFilters > 0 && (
+              <span style={{
+                background: 'var(--accent)', color: '#fff',
+                borderRadius: 'var(--r-full)', fontSize: '0.6rem', fontWeight: 700,
+                padding: '1px 5px', lineHeight: 1.4,
+              }}>{activeFilters}</span>
+            )}
+          </button>
+
           {/* My folders filter */}
           {session && (
             <button
@@ -134,6 +227,7 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
               <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
             </svg>
             <input
+              ref={searchRef}
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Rechercher…"
@@ -157,6 +251,7 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
             {([
               { key: 'kanban' as View, label: 'Kanban', icon: <KanbanIcon /> },
               { key: 'list' as View, label: 'Liste', icon: <ListIcon /> },
+              { key: 'calendar' as View, label: 'Calendrier', icon: <CalendarIcon /> },
             ] as const).map(v => (
               <button
                 key={v.key}
@@ -176,6 +271,20 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
               </button>
             ))}
           </div>
+
+          {/* Keyboard shortcuts hint */}
+          <button
+            onClick={() => setShowShortcuts(v => !v)}
+            title="Raccourcis clavier (?)"
+            style={{
+              width: 28, height: 28, borderRadius: 8, border: '1px solid var(--border)',
+              background: 'var(--surface-2)', color: 'var(--text-3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.75rem', fontWeight: 700, cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            ?
+          </button>
 
           {/* Change password */}
           {session && (
@@ -211,12 +320,64 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
           </button>
         </header>
 
+        {/* Filter panel */}
+        {showFilters && (
+          <div style={{
+            padding: '10px 20px', background: 'var(--surface)',
+            borderBottom: '1px solid var(--border)',
+            display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+          }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginRight: 4 }}>
+              Filtres :
+            </span>
+            <select value={filterStep} onChange={e => setFilterStep(e.target.value)} style={selectStyle}>
+              <option value="">Toutes les étapes</option>
+              <option value="__none">Sans étape</option>
+              {steps.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select value={filterMember} onChange={e => setFilterMember(e.target.value)} style={selectStyle}>
+              <option value="">Tous les membres</option>
+              <option value="__none">Non assigné</option>
+              {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+            <select value={filterPriority} onChange={e => setFilterPriority(e.target.value)} style={selectStyle}>
+              <option value="">Toutes priorités</option>
+              <option value="high">Haute</option>
+              <option value="medium">Moyenne</option>
+              <option value="low">Faible</option>
+            </select>
+            {allTags.length > 0 && (
+              <select value={filterTag} onChange={e => setFilterTag(e.target.value)} style={selectStyle}>
+                <option value="">Tous les tags</option>
+                {allTags.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+            )}
+            {activeFilters > 0 && (
+              <button
+                onClick={() => { setFilterStep(''); setFilterMember(''); setFilterPriority(''); setFilterTag(''); }}
+                style={{
+                  padding: '5px 10px', borderRadius: 8, fontSize: '0.75rem', fontWeight: 600,
+                  border: '1px solid var(--border)', background: 'none', color: 'var(--text-3)',
+                  cursor: 'pointer',
+                }}
+              >
+                Réinitialiser
+              </button>
+            )}
+            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-3)' }}>
+              {filtered.length} / {folders.length} dossier{folders.length > 1 ? 's' : ''}
+            </span>
+          </div>
+        )}
+
         {/* Content area */}
         <main style={{ flex: 1, overflow: 'auto', padding: 20 }}>
-          {filtered.length === 0 && !search ? (
+          {filtered.length === 0 && !search && !activeFilters ? (
             <EmptyState onNew={() => setShowNewForm(true)} />
           ) : view === 'kanban' ? (
-            <KanbanView folders={filtered} steps={steps} slug={slug} />
+            <KanbanView folders={filtered} steps={steps} slug={slug} onMove={handleMove} />
+          ) : view === 'calendar' ? (
+            <CalendarView folders={filtered} slug={slug} />
           ) : (
             <ListView folders={filtered} steps={steps} members={members} slug={slug} />
           )}
@@ -236,6 +397,10 @@ export default function TeamPage({ params }: { params: Promise<{ slug: string }>
           slug={slug}
           onClose={() => setShowPasswordModal(false)}
         />
+      )}
+
+      {showShortcuts && (
+        <ShortcutsOverlay onClose={() => setShowShortcuts(false)} />
       )}
     </div>
   );
@@ -273,12 +438,28 @@ function EmptyState({ onNew }: { onNew: () => void }) {
 }
 
 /* ─── Kanban view ────────────────────────────────────────────── */
-function KanbanView({ folders, steps, slug }: { folders: Folder[]; steps: WorkflowStep[]; slug: string }) {
+function KanbanView({
+  folders, steps, slug, onMove,
+}: {
+  folders: Folder[];
+  steps: WorkflowStep[];
+  slug: string;
+  onMove: (folderId: string, newStepId: string | null) => void;
+}) {
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overCol, setOverCol] = useState<string | null>(null);
+
   const noStep = folders.filter(f => !f.stepId);
   const allCols = [
     ...steps.map(s => ({ id: s.id, name: s.name, color: s.color, items: folders.filter(f => f.stepId === s.id) })),
-    ...(noStep.length > 0 ? [{ id: null, name: 'Sans étape', color: 'var(--border-2)', items: noStep }] : []),
+    ...(noStep.length > 0 ? [{ id: null as string | null, name: 'Sans étape', color: 'var(--border-2)', items: noStep }] : []),
   ];
+
+  const handleDrop = (colId: string | null) => {
+    if (dragId) onMove(dragId, colId);
+    setDragId(null);
+    setOverCol(null);
+  };
 
   return (
     <div style={{ display: 'flex', gap: 14, overflowX: 'auto', paddingBottom: 16, alignItems: 'flex-start', minHeight: 400 }}>
@@ -287,6 +468,9 @@ function KanbanView({ folders, steps, slug }: { folders: Folder[]; steps: Workfl
           key={col.id ?? '__none'}
           className={`slide-up stagger-${Math.min(colIdx + 1, 5)}`}
           style={{ minWidth: 268, maxWidth: 300, flexShrink: 0 }}
+          onDragOver={e => { e.preventDefault(); setOverCol(col.id ?? '__none'); }}
+          onDragLeave={() => setOverCol(null)}
+          onDrop={() => handleDrop(col.id)}
         >
           {/* Column header */}
           <div style={{
@@ -311,10 +495,23 @@ function KanbanView({ folders, steps, slug }: { folders: Folder[]; steps: Workfl
             </span>
           </div>
 
-          {/* Cards */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Drop zone */}
+          <div
+            style={{
+              display: 'flex', flexDirection: 'column', gap: 8,
+              minHeight: 60, borderRadius: 12, padding: 4, margin: -4,
+              transition: 'background 0.15s',
+              background: overCol === (col.id ?? '__none') && dragId ? 'color-mix(in srgb, var(--accent) 6%, transparent)' : 'transparent',
+              border: overCol === (col.id ?? '__none') && dragId ? '1.5px dashed var(--accent)' : '1.5px dashed transparent',
+            }}
+          >
             {col.items.map(f => (
-              <FolderCard key={f.id} folder={f} slug={slug} stepColor={col.color} />
+              <FolderCard
+                key={f.id} folder={f} slug={slug} stepColor={col.color}
+                onDragStart={() => setDragId(f.id)}
+                onDragEnd={() => { setDragId(null); setOverCol(null); }}
+                isDragging={dragId === f.id}
+              />
             ))}
             {col.items.length === 0 && (
               <div style={{
@@ -332,105 +529,259 @@ function KanbanView({ folders, steps, slug }: { folders: Folder[]; steps: Workfl
 }
 
 /* ─── Folder card (kanban) ───────────────────────────────────── */
-function FolderCard({ folder: f, slug, stepColor }: { folder: Folder; slug: string; stepColor: string }) {
+function FolderCard({
+  folder: f, slug, stepColor, onDragStart, onDragEnd, isDragging,
+}: {
+  folder: Folder;
+  slug: string;
+  stepColor: string;
+  onDragStart?: () => void;
+  onDragEnd?: () => void;
+  isDragging?: boolean;
+}) {
   const stale = staleDays(f.lastActivityAt);
   const isOverdue = f.dueDate && new Date(f.dueDate) < new Date();
   const priorityColor = f.priority >= 70 ? '#dc2626' : f.priority >= 40 ? '#d97706' : '#16a34a';
   const priorityLabel = f.priority >= 70 ? 'Haute' : f.priority >= 40 ? 'Moyenne' : 'Faible';
 
   return (
-    <Link
-      href={`/team/${slug}/folder/${f.id}`}
-      style={{
-        textDecoration: 'none', display: 'block',
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderLeft: `3px solid ${stepColor}`,
-        borderRadius: 12, padding: '13px 13px 11px',
-        boxShadow: 'var(--shadow-sm)',
-        transition: 'box-shadow 0.2s, transform 0.15s',
-      }}
-      onMouseEnter={e => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.boxShadow = 'var(--shadow-md)';
-        el.style.transform = 'translateY(-1px)';
-      }}
-      onMouseLeave={e => {
-        const el = e.currentTarget as HTMLElement;
-        el.style.boxShadow = 'var(--shadow-sm)';
-        el.style.transform = 'translateY(0)';
-      }}
+    <div
+      draggable
+      onDragStart={e => { e.dataTransfer.effectAllowed = 'move'; onDragStart?.(); }}
+      onDragEnd={onDragEnd}
+      style={{ opacity: isDragging ? 0.4 : 1, transition: 'opacity 0.15s' }}
     >
-      {/* Ref + unread */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-4)', letterSpacing: '0.02em' }}>
-          {f.ref}
-        </span>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-          {stale > 7 && <span className="stale-red" style={{ fontSize: '0.62rem' }}>{stale}j</span>}
-          {stale > 3 && stale <= 7 && <span className="stale-orange" style={{ fontSize: '0.62rem' }}>{stale}j</span>}
-          {f.hasUnread && <span className="unread-dot" />}
-        </div>
-      </div>
-
-      {/* Title */}
-      <p style={{
-        fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)',
-        lineHeight: 1.4, marginBottom: 10,
-        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-      }}>
-        {f.title}
-      </p>
-
-      {/* Meta row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-        {f.assigneeName && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-            <div
-              className="avatar"
-              style={{ width: 18, height: 18, fontSize: '0.55rem', borderRadius: 4 }}
-            >
-              {f.assigneeName.slice(0, 1).toUpperCase()}
-            </div>
-            <span style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 500 }}>
-              {f.assigneeName.split(' ')[0]}
-            </span>
-          </div>
-        )}
-
-        {f.dueDate && (
-          <span style={{
-            fontSize: '0.7rem', fontWeight: 500,
-            color: isOverdue ? '#dc2626' : 'var(--text-3)',
-          }}>
-            {isOverdue && '⚠ '}
-            {new Date(f.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+      <Link
+        href={`/team/${slug}/folder/${f.id}`}
+        style={{
+          textDecoration: 'none', display: 'block',
+          background: 'var(--surface)',
+          border: '1px solid var(--border)',
+          borderLeft: `3px solid ${stepColor}`,
+          borderRadius: 12, padding: '13px 13px 11px',
+          boxShadow: 'var(--shadow-sm)',
+          transition: 'box-shadow 0.2s, transform 0.15s',
+          cursor: 'grab',
+        }}
+        onMouseEnter={e => {
+          const el = e.currentTarget as HTMLElement;
+          el.style.boxShadow = 'var(--shadow-md)';
+          el.style.transform = 'translateY(-1px)';
+        }}
+        onMouseLeave={e => {
+          const el = e.currentTarget as HTMLElement;
+          el.style.boxShadow = 'var(--shadow-sm)';
+          el.style.transform = 'translateY(0)';
+        }}
+        onClick={e => { if (isDragging) e.preventDefault(); }}
+      >
+        {/* Ref + unread */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.62rem', color: 'var(--text-4)', letterSpacing: '0.02em' }}>
+            {f.ref}
           </span>
-        )}
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }}>
-          <span style={{
-            width: 6, height: 6, borderRadius: '50%',
-            background: priorityColor, display: 'inline-block', flexShrink: 0,
-          }} />
-          <span style={{ fontSize: '0.65rem', color: priorityColor, fontWeight: 500 }}>{priorityLabel}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            {stale > 7 && <span className="stale-red" style={{ fontSize: '0.62rem' }}>{stale}j</span>}
+            {stale > 3 && stale <= 7 && <span className="stale-orange" style={{ fontSize: '0.62rem' }}>{stale}j</span>}
+            {f.hasUnread && <span className="unread-dot" />}
+          </div>
         </div>
-      </div>
 
-      {/* Tags */}
-      {f.tags.length > 0 && (
-        <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
-          {f.tags.slice(0, 3).map(t => (
-            <span key={t} className="tag">{t}</span>
-          ))}
-          {f.tags.length > 3 && (
-            <span style={{ fontSize: '0.6rem', color: 'var(--text-4)', alignSelf: 'center' }}>
-              +{f.tags.length - 3}
+        {/* Title */}
+        <p style={{
+          fontSize: '0.85rem', fontWeight: 600, color: 'var(--text)',
+          lineHeight: 1.4, marginBottom: 10,
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+        }}>
+          {f.title}
+        </p>
+
+        {/* Meta row */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          {f.assigneeName && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <div className="avatar" style={{ width: 18, height: 18, fontSize: '0.55rem', borderRadius: 4 }}>
+                {f.assigneeName.slice(0, 1).toUpperCase()}
+              </div>
+              <span style={{ fontSize: '0.72rem', color: 'var(--text-3)', fontWeight: 500 }}>
+                {f.assigneeName.split(' ')[0]}
+              </span>
+            </div>
+          )}
+
+          {f.dueDate && (
+            <span style={{
+              fontSize: '0.7rem', fontWeight: 500,
+              color: isOverdue ? '#dc2626' : 'var(--text-3)',
+            }}>
+              {isOverdue && '⚠ '}
+              {new Date(f.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
             </span>
           )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 3, marginLeft: 'auto' }}>
+            <span style={{
+              width: 6, height: 6, borderRadius: '50%',
+              background: priorityColor, display: 'inline-block', flexShrink: 0,
+            }} />
+            <span style={{ fontSize: '0.65rem', color: priorityColor, fontWeight: 500 }}>{priorityLabel}</span>
+          </div>
         </div>
-      )}
-    </Link>
+
+        {/* Tags */}
+        {f.tags.length > 0 && (
+          <div style={{ display: 'flex', gap: 4, marginTop: 8, flexWrap: 'wrap' }}>
+            {f.tags.slice(0, 3).map(t => (
+              <span key={t} className="tag">{t}</span>
+            ))}
+            {f.tags.length > 3 && (
+              <span style={{ fontSize: '0.6rem', color: 'var(--text-4)', alignSelf: 'center' }}>
+                +{f.tags.length - 3}
+              </span>
+            )}
+          </div>
+        )}
+      </Link>
+    </div>
+  );
+}
+
+/* ─── Calendar view ──────────────────────────────────────────── */
+function CalendarView({ folders, slug }: { folders: Folder[]; slug: string }) {
+  const today = new Date();
+  const [year, setYear] = useState(today.getFullYear());
+  const [month, setMonth] = useState(today.getMonth());
+
+  const firstDay = new Date(year, month, 1);
+  const lastDay = new Date(year, month + 1, 0);
+  const startDow = (firstDay.getDay() + 6) % 7; // Mon=0
+  const daysInMonth = lastDay.getDate();
+
+  const foldersByDay: Record<number, Folder[]> = {};
+  folders.forEach(f => {
+    if (!f.dueDate) return;
+    const d = new Date(f.dueDate);
+    if (d.getFullYear() === year && d.getMonth() === month) {
+      const day = d.getDate();
+      if (!foldersByDay[day]) foldersByDay[day] = [];
+      foldersByDay[day].push(f);
+    }
+  });
+
+  const monthName = firstDay.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+  const weekDays = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+
+  const cells: (number | null)[] = [
+    ...Array(startDow).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  const prevMonth = () => {
+    if (month === 0) { setYear(y => y - 1); setMonth(11); }
+    else setMonth(m => m - 1);
+  };
+  const nextMonth = () => {
+    if (month === 11) { setYear(y => y + 1); setMonth(0); }
+    else setMonth(m => m + 1);
+  };
+
+  return (
+    <div className="slide-up" style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 16, overflow: 'hidden', boxShadow: 'var(--shadow-sm)' }}>
+      {/* Month nav */}
+      <div style={{
+        display: 'flex', alignItems: 'center', padding: '14px 18px',
+        borderBottom: '1px solid var(--border)', gap: 12,
+      }}>
+        <button onClick={prevMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: '4px 8px', borderRadius: 8, fontSize: '1rem' }}>‹</button>
+        <span style={{ flex: 1, textAlign: 'center', fontWeight: 700, fontSize: '0.88rem', color: 'var(--text)', textTransform: 'capitalize', letterSpacing: '-0.01em' }}>
+          {monthName}
+        </span>
+        <button onClick={nextMonth} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: '4px 8px', borderRadius: 8, fontSize: '1rem' }}>›</button>
+        <button
+          onClick={() => { setYear(today.getFullYear()); setMonth(today.getMonth()); }}
+          style={{
+            padding: '4px 10px', borderRadius: 7, border: '1px solid var(--border)',
+            background: 'var(--surface-2)', color: 'var(--text-3)', fontSize: '0.72rem', cursor: 'pointer',
+          }}
+        >
+          Aujourd'hui
+        </button>
+      </div>
+
+      {/* Week day headers */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', borderBottom: '1px solid var(--border)' }}>
+        {weekDays.map(d => (
+          <div key={d} style={{
+            padding: '8px 0', textAlign: 'center',
+            fontSize: '0.65rem', fontWeight: 700, color: 'var(--text-3)',
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+          }}>
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Days grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        {cells.map((day, i) => {
+          const isToday = day !== null && day === today.getDate() && year === today.getFullYear() && month === today.getMonth();
+          const dayFolders = day ? (foldersByDay[day] ?? []) : [];
+          return (
+            <div
+              key={i}
+              style={{
+                minHeight: 90, padding: '6px 8px',
+                borderRight: (i + 1) % 7 !== 0 ? '1px solid var(--border)' : 'none',
+                borderBottom: i < cells.length - 7 ? '1px solid var(--border)' : 'none',
+                background: day === null ? 'var(--surface-2)' : 'var(--surface)',
+                opacity: day === null ? 0.5 : 1,
+              }}
+            >
+              {day !== null && (
+                <>
+                  <span style={{
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                    width: 22, height: 22, borderRadius: '50%', fontSize: '0.72rem', fontWeight: isToday ? 700 : 400,
+                    color: isToday ? '#fff' : 'var(--text-2)',
+                    background: isToday ? 'var(--accent)' : 'transparent',
+                    marginBottom: 4,
+                  }}>
+                    {day}
+                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {dayFolders.slice(0, 3).map(f => (
+                      <Link
+                        key={f.id}
+                        href={`/team/${slug}/folder/${f.id}`}
+                        style={{
+                          textDecoration: 'none', display: 'block',
+                          fontSize: '0.62rem', fontWeight: 500,
+                          padding: '2px 5px', borderRadius: 4,
+                          background: f.stepColor
+                            ? `color-mix(in srgb, ${f.stepColor} 15%, var(--surface))`
+                            : 'var(--surface-2)',
+                          color: f.stepColor ?? 'var(--text-3)',
+                          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        }}
+                        title={f.title}
+                      >
+                        {f.title}
+                      </Link>
+                    ))}
+                    {dayFolders.length > 3 && (
+                      <span style={{ fontSize: '0.6rem', color: 'var(--text-4)', paddingLeft: 5 }}>
+                        +{dayFolders.length - 3}
+                      </span>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
@@ -557,6 +908,65 @@ function PriorityBadge({ priority }: { priority: number }) {
   );
 }
 
+/* ─── Keyboard shortcuts overlay ────────────────────────────── */
+function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
+  const shortcuts = [
+    { key: 'n', desc: 'Nouveau dossier' },
+    { key: 'k', desc: 'Vue Kanban' },
+    { key: 'l', desc: 'Vue Liste' },
+    { key: 'c', desc: 'Vue Calendrier' },
+    { key: 'f', desc: 'Focus recherche' },
+    { key: '?', desc: 'Afficher/masquer les raccourcis' },
+    { key: 'Esc', desc: 'Fermer les panneaux' },
+  ];
+  return (
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 300,
+        background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
+      onClick={onClose}
+    >
+      <div
+        className="scale-in"
+        style={{
+          background: 'var(--surface)', borderRadius: 18, padding: 28,
+          width: '100%', maxWidth: 380,
+          border: '1px solid var(--border)', boxShadow: 'var(--shadow-xl)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+          <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.02em' }}>
+            Raccourcis clavier
+          </h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-3)', padding: 4 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6 6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {shortcuts.map(s => (
+            <div key={s.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.82rem', color: 'var(--text-2)' }}>{s.desc}</span>
+              <kbd style={{
+                fontFamily: 'var(--font-mono)', fontSize: '0.72rem', fontWeight: 600,
+                padding: '3px 9px', borderRadius: 6,
+                background: 'var(--surface-2)', border: '1px solid var(--border)',
+                color: 'var(--text-2)', boxShadow: '0 1px 0 var(--border)',
+              }}>
+                {s.key}
+              </kbd>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ─── Icons ──────────────────────────────────────────────────── */
 function KanbanIcon() {
   return (
@@ -569,6 +979,13 @@ function ListIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
       <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+    </svg>
+  );
+}
+function CalendarIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="18" rx="2" /><path d="M16 2v4M8 2v4M3 10h18" />
     </svg>
   );
 }

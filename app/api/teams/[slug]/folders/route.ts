@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getTeamFolders, getTeamSteps, getTeamMembers, createFolder, addHistoryEntry } from '@/lib/data';
+import { getTeamFolders, getArchivedFolders, getTeamSteps, getTeamMembers, createFolder, addHistoryEntry } from '@/lib/data';
 import { getTeamSession } from '@/lib/auth';
 import { CreateFolderSchema } from '@/lib/validations';
 
@@ -10,9 +10,11 @@ export async function GET(req: NextRequest, { params }: Params) {
   const session = await getTeamSession(slug);
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const includeArchived = req.nextUrl.searchParams.get('archived') === '1';
+  const archivedParam = req.nextUrl.searchParams.get('archived');
+  const onlyArchived = archivedParam === 'only';
+  const includeArchived = archivedParam === '1' || onlyArchived;
   const [folderList, steps, members] = await Promise.all([
-    getTeamFolders(slug, session.memberId, includeArchived),
+    onlyArchived ? getArchivedFolders(slug, session.memberId) : getTeamFolders(slug, session.memberId, false),
     getTeamSteps(slug),
     getTeamMembers(slug),
   ]);

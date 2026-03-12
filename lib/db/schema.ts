@@ -18,6 +18,7 @@ export const teamMembers = pgTable('team_members', {
   canComment: boolean('can_comment').notNull().default(true),
   passwordHash: text('password_hash'), // optional per-member password
   token: text('token').notNull(),
+  sessionVersion: integer('session_version').notNull().default(0),
   createdAt: text('created_at').notNull(),
 });
 
@@ -71,6 +72,7 @@ export const folderTasks = pgTable('folder_tasks', {
   done: boolean('done').notNull().default(false),
   assigneeId: text('assignee_id'),
   assigneeName: text('assignee_name'),
+  dueDate: text('due_date'),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: text('created_at').notNull(),
 });

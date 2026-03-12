@@ -38,6 +38,7 @@ export interface WorkflowStep {
   teamSlug: string;
   name: string;
   color: string;
+  dueDate?: string;
   sortOrder: number;
 }
 
@@ -87,6 +88,7 @@ export interface FolderTask {
   done: boolean;
   assigneeId?: string;
   assigneeName?: string;
+  dueDate?: string;
   sortOrder: number;
   createdAt: string;
 }
@@ -97,4 +99,6 @@ export interface TeamSession {
   role: MemberRole;
   canComment: boolean;
   teamSlug: string;
+  jti?: string; // member token UUID for session revocation
+  sv?: number;  // session version
 }

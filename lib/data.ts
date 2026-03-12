@@ -544,6 +544,13 @@ export async function addHistoryEntry(data: {
 
 /* ─── Views (notifications) ──────────────────────────────────── */
 
+/* ─── Archived folders ───────────────────────────────────────── */
+
+export async function getArchivedFolders(slug: string, memberId: string): Promise<Folder[]> {
+  const all = await getTeamFolders(slug, memberId, true);
+  return all.filter(f => f.archived);
+}
+
 /* ─── Tasks ──────────────────────────────────────────────────── */
 
 export async function getFolderTasks(folderId: string): Promise<FolderTask[]> {
@@ -559,6 +566,7 @@ export async function getFolderTasks(folderId: string): Promise<FolderTask[]> {
     done: r.done,
     assigneeId: r.assigneeId ?? undefined,
     assigneeName: r.assigneeName ?? undefined,
+    dueDate: r.dueDate ?? undefined,
     sortOrder: r.sortOrder,
     createdAt: r.createdAt,
   }));
@@ -569,6 +577,7 @@ export async function createFolderTask(data: {
   title: string;
   assigneeId?: string;
   assigneeName?: string;
+  dueDate?: string;
   sortOrder?: number;
 }): Promise<FolderTask> {
   const id = crypto.randomUUID();
@@ -580,19 +589,21 @@ export async function createFolderTask(data: {
     done: false,
     assigneeId: data.assigneeId ?? null,
     assigneeName: data.assigneeName ?? null,
+    dueDate: data.dueDate ?? null,
     sortOrder: data.sortOrder ?? 0,
     createdAt: now,
   });
   return {
     id, folderId: data.folderId, title: data.title, done: false,
     assigneeId: data.assigneeId, assigneeName: data.assigneeName,
+    dueDate: data.dueDate,
     sortOrder: data.sortOrder ?? 0, createdAt: now,
   };
 }
 
 export async function updateFolderTask(
   id: string,
-  updates: Partial<{ title: string; done: boolean; assigneeId: string | null; assigneeName: string | null; sortOrder: number }>,
+  updates: Partial<{ title: string; done: boolean; assigneeId: string | null; assigneeName: string | null; dueDate: string | null; sortOrder: number }>,
 ): Promise<void> {
   await db.update(folderTasks).set(updates).where(eq(folderTasks.id, id));
 }

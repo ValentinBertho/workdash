@@ -5,7 +5,23 @@ import { TeamAuthSchema } from '@/lib/validations';
 
 type Params = { params: Promise<{ slug: string }> };
 
+/* ─── Simple in-memory rate limiter (per function instance) ───── */
+const rl = new Map<string, { n: number; reset: number }>();
+function checkRate(ip: string): boolean {
+  const now = Date.now();
+  const e = rl.get(ip);
+  if (!e || e.reset < now) { rl.set(ip, { n: 1, reset: now + 60_000 }); return true; }
+  if (e.n >= 10) return false;
+  e.n++;
+  return true;
+}
+
 export async function POST(req: NextRequest, { params }: Params) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown';
+  if (!checkRate(ip)) {
+    return NextResponse.json({ error: 'Trop de tentatives. Réessayez dans 1 minute.' }, { status: 429 });
+  }
+
   const { slug } = await params;
   const team = await getTeamForAuth(slug);
   if (!team) return NextResponse.json({ error: 'Équipe introuvable' }, { status: 404 });
@@ -26,7 +42,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   let member = await getMemberForAuth(slug, memberName);
-  let token: string;
+  let memberToken: string;
 
   if (member) {
     // Check member personal password if set
@@ -35,12 +51,12 @@ export async function POST(req: NextRequest, { params }: Params) {
         return NextResponse.json({ error: 'Mot de passe incorrect' }, { status: 401 });
       }
     }
-    token = (await getMemberToken(member.id))!;
+    memberToken = (await getMemberToken(member.id))!;
   } else {
     // Create new member (open-access teams without pre-created accounts)
     const result = await createMemberWithPassword({ teamSlug: slug, name: memberName, role: 'operator' });
     member = result.member;
-    token = result.token;
+    memberToken = result.token;
   }
 
   const jwt = await createTeamToken({
@@ -49,6 +65,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     role: member.role,
     canComment: member.canComment,
     teamSlug: slug,
+    jti: memberToken, // used for session revocation
   });
 
   const res = NextResponse.json({ member });

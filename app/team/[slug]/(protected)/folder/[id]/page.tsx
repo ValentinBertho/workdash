@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect, use, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { Folder, FolderComment, FolderHistoryEntry, FolderTask, WorkflowStep, TeamMember } from '@/types';
 import { Sidebar } from '@/app/components/Sidebar';
@@ -53,6 +53,14 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
   const [editDesc, setEditDesc] = useState('');
   const [editTags, setEditTags] = useState('');
 
+  const fetchComments = useCallback(async () => {
+    const r = await fetch(`/api/teams/${slug}/folders/${id}/comments`);
+    if (r.ok) {
+      const data = await r.json();
+      setComments(data.comments ?? []);
+    }
+  }, [slug, id]);
+
   useEffect(() => {
     Promise.all([
       fetch(`/api/teams/${slug}/folders/${id}`).then(r => r.json()),
@@ -77,6 +85,14 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
     }).finally(() => setLoading(false));
     fetch(`/api/teams/${slug}/folders/${id}/view`, { method: 'POST' });
   }, [slug, id]);
+
+  // Poll comments every 5s when page is focused
+  useEffect(() => {
+    const poll = () => { if (document.visibilityState === 'visible') fetchComments(); };
+    const interval = setInterval(poll, 5000);
+    document.addEventListener('visibilitychange', poll);
+    return () => { clearInterval(interval); document.removeEventListener('visibilitychange', poll); };
+  }, [fetchComments]);
 
   const saveEdit = async () => {
     const tags = editTags.split(',').map(t => t.trim()).filter(Boolean);
@@ -435,42 +451,21 @@ export default function FolderPage({ params }: { params: Promise<{ slug: string;
                           background: 'var(--surface-2)', borderRadius: '4px 12px 12px 12px',
                           padding: '9px 13px', border: '1px solid var(--border)',
                         }}>
-                          <p style={{ fontSize: '0.83rem', color: 'var(--text-2)', lineHeight: 1.55 }}>{c.text}</p>
+                          <CommentText text={c.text} />
                         </div>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                {/* Comment input */}
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendComment()}
-                    placeholder="Ajouter un commentaire… (Entrée pour envoyer)"
-                    style={{
-                      flex: 1, padding: '9px 13px', borderRadius: 10,
-                      border: '1px solid var(--border)', background: 'var(--surface-2)',
-                      color: 'var(--text)', fontSize: '0.83rem', outline: 'none',
-                      transition: 'border-color 0.15s',
-                    }}
-                    onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
-                    onBlur={e => (e.target.style.borderColor = 'var(--border)')}
-                  />
-                  <button
-                    onClick={sendComment}
-                    disabled={sending || !comment.trim()}
-                    className="btn-primary"
-                    style={{ padding: '9px 16px', flexShrink: 0 }}
-                  >
-                    {sending ? '…' : (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                        <path d="M22 2 11 13M22 2 15 22 11 13 2 9 22 2z" />
-                      </svg>
-                    )}
-                  </button>
-                </div>
+                {/* Comment input with @mention */}
+                <MentionInput
+                  value={comment}
+                  onChange={setComment}
+                  members={members}
+                  onSubmit={sendComment}
+                  disabled={sending}
+                />
               </div>
             </div>
 
@@ -546,6 +541,7 @@ function TasksSection({
 }) {
   const [newTitle, setNewTitle] = useState('');
   const [newAssigneeId, setNewAssigneeId] = useState('');
+  const [newDueDate, setNewDueDate] = useState('');
   const [adding, setAdding] = useState(false);
   const [showForm, setShowForm] = useState(false);
 
@@ -563,6 +559,7 @@ function TasksSection({
         title: newTitle.trim(),
         assigneeId: newAssigneeId || undefined,
         assigneeName: assignee?.name || undefined,
+        dueDate: newDueDate || undefined,
         sortOrder: tasks.length,
       }),
     });
@@ -571,6 +568,7 @@ function TasksSection({
       onAdd(data.task);
       setNewTitle('');
       setNewAssigneeId('');
+      setNewDueDate('');
       setShowForm(false);
     }
     setAdding(false);
@@ -679,6 +677,17 @@ function TasksSection({
                 {t.title}
               </span>
 
+              {/* Due date */}
+              {t.dueDate && (
+                <span style={{
+                  fontSize: '0.65rem', fontWeight: 500,
+                  color: new Date(t.dueDate) < new Date() && !t.done ? '#dc2626' : 'var(--text-4)',
+                  flexShrink: 0,
+                }}>
+                  {new Date(t.dueDate).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                </span>
+              )}
+
               {/* Assignee */}
               {t.assigneeName && (
                 <div
@@ -738,20 +747,33 @@ function TasksSection({
               onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
               onBlur={e => (e.target.style.borderColor = 'var(--border)')}
             />
-            {members.length > 0 && (
-              <select
-                value={newAssigneeId}
-                onChange={e => setNewAssigneeId(e.target.value)}
+            <div style={{ display: 'flex', gap: 6 }}>
+              {members.length > 0 && (
+                <select
+                  value={newAssigneeId}
+                  onChange={e => setNewAssigneeId(e.target.value)}
+                  style={{
+                    flex: 1, padding: '6px 10px', borderRadius: 8,
+                    border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
+                    fontSize: '0.78rem', outline: 'none',
+                  }}
+                >
+                  <option value="">Non assignée</option>
+                  {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                </select>
+              )}
+              <input
+                type="date"
+                value={newDueDate}
+                onChange={e => setNewDueDate(e.target.value)}
+                title="Échéance"
                 style={{
-                  width: '100%', padding: '6px 10px', borderRadius: 8,
+                  padding: '6px 8px', borderRadius: 8,
                   border: '1px solid var(--border)', background: 'var(--surface)', color: 'var(--text)',
                   fontSize: '0.78rem', outline: 'none',
                 }}
-              >
-                <option value="">Non assignée</option>
-                {members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-            )}
+              />
+            </div>
           </div>
           <button
             onClick={addTask}
@@ -805,6 +827,144 @@ function PriorityDisplay({ priority }: { priority: number }) {
       <div style={{ height: 3, background: 'var(--border)', borderRadius: 'var(--r-full)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 'var(--r-full)', transition: 'width 0.6s var(--ease-spring)' }} />
       </div>
+    </div>
+  );
+}
+
+/* ─── Comment text with @mention highlight ───────────────────── */
+function CommentText({ text }: { text: string }) {
+  const parts = text.split(/(@\w[\w\s]*?\b)/g);
+  return (
+    <p style={{ fontSize: '0.83rem', color: 'var(--text-2)', lineHeight: 1.55 }}>
+      {parts.map((part, i) =>
+        part.startsWith('@') ? (
+          <span key={i} style={{
+            color: 'var(--accent)', fontWeight: 600,
+            background: 'var(--accent-light)', borderRadius: 4, padding: '0 3px',
+          }}>
+            {part}
+          </span>
+        ) : part
+      )}
+    </p>
+  );
+}
+
+/* ─── Mention input ──────────────────────────────────────────── */
+function MentionInput({
+  value, onChange, members, onSubmit, disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  members: TeamMember[];
+  onSubmit: () => void;
+  disabled?: boolean;
+}) {
+  const [mentionQuery, setMentionQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [mentionStart, setMentionStart] = useState(-1);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const v = e.target.value;
+    const cursor = e.target.selectionStart ?? v.length;
+    onChange(v);
+
+    // Detect @mention: find the last @ before cursor
+    const before = v.slice(0, cursor);
+    const match = before.match(/@(\w*)$/);
+    if (match) {
+      setMentionStart(cursor - match[0].length);
+      setMentionQuery(match[1]);
+      setShowDropdown(true);
+    } else {
+      setShowDropdown(false);
+    }
+  };
+
+  const insertMention = (name: string) => {
+    const before = value.slice(0, mentionStart);
+    const after = value.slice(mentionStart + 1 + mentionQuery.length);
+    const newVal = `${before}@${name} ${after}`;
+    onChange(newVal);
+    setShowDropdown(false);
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (el) {
+        const pos = before.length + name.length + 2;
+        el.setSelectionRange(pos, pos);
+        el.focus();
+      }
+    }, 0);
+  };
+
+  const filtered = members.filter(m =>
+    m.name.toLowerCase().startsWith(mentionQuery.toLowerCase())
+  );
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', gap: 8 }}>
+      <div style={{ flex: 1, position: 'relative' }}>
+        <input
+          ref={inputRef}
+          value={value}
+          onChange={handleChange}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && !e.shiftKey && !showDropdown) { e.preventDefault(); onSubmit(); }
+            if (e.key === 'Escape') setShowDropdown(false);
+          }}
+          placeholder="Ajouter un commentaire… (@mention, Entrée pour envoyer)"
+          style={{
+            width: '100%', padding: '9px 13px', borderRadius: 10,
+            border: '1px solid var(--border)', background: 'var(--surface-2)',
+            color: 'var(--text)', fontSize: '0.83rem', outline: 'none',
+            transition: 'border-color 0.15s', boxSizing: 'border-box',
+          }}
+          onFocus={e => (e.target.style.borderColor = 'var(--accent)')}
+          onBlur={e => { e.target.style.borderColor = 'var(--border)'; setTimeout(() => setShowDropdown(false), 150); }}
+        />
+        {showDropdown && filtered.length > 0 && (
+          <div style={{
+            position: 'absolute', bottom: '110%', left: 0,
+            background: 'var(--surface)', border: '1px solid var(--border)',
+            borderRadius: 10, boxShadow: 'var(--shadow-md)',
+            zIndex: 100, minWidth: 160, overflow: 'hidden',
+          }}>
+            {filtered.map(m => (
+              <button
+                key={m.id}
+                onMouseDown={e => { e.preventDefault(); insertMention(m.name); }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  width: '100%', padding: '7px 12px', border: 'none',
+                  background: 'none', cursor: 'pointer', textAlign: 'left',
+                  fontSize: '0.82rem', color: 'var(--text)',
+                  transition: 'background 0.1s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >
+                <div className="avatar" style={{ width: 22, height: 22, fontSize: '0.6rem', borderRadius: 5, flexShrink: 0 }}>
+                  {m.name.slice(0, 1).toUpperCase()}
+                </div>
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <button
+        onClick={onSubmit}
+        disabled={disabled || !value.trim()}
+        className="btn-primary"
+        style={{ padding: '9px 16px', flexShrink: 0 }}
+      >
+        {disabled ? '…' : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+            <path d="M22 2 11 13M22 2 15 22 11 13 2 9 22 2z" />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
